@@ -89,6 +89,7 @@ test('memory_search validates its args before dispatch', async () => {
   await assert.rejects(search.execute({}), /memory_search\.query/);
   await assert.rejects(search.execute({ query: '' }), /memory_search\.query/);
   await assert.rejects(search.execute({ query: 'x', top: -1 }), /memory_search\.top/);
+  await assert.rejects(search.execute({ query: 'x', top: 0 }), /memory_search\.top/);
   await assert.rejects(search.execute({ query: 'x', top: 2.5 }), /memory_search\.top/);
 });
 
@@ -99,6 +100,18 @@ test('memory_write validates proposal before dispatch', async () => {
   await assert.rejects(write.execute({}), /memory_write\.proposal/);
   await assert.rejects(write.execute({ proposal: null }), /memory_write\.proposal/);
   await assert.rejects(write.execute({ proposal: {} }), /memory_write\.proposal\.module/);
-  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', evidence: [] } }), /memory_write\.proposal\.evidence/);
-  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', evidence: ['e'] } }), /memory_write\.proposal\.draft/);
+  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', confidence: 'high', evidence: [] } }), /memory_write\.proposal\.evidence/);
+  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', confidence: 'high', evidence: ['e'] } }), /memory_write\.proposal\.draft/);
+  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', confidence: 'high', evidence: ['e'], draft: {} } }), /memory_write\.proposal\.draft\.relPath/);
+  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', confidence: 'high', evidence: ['e'], draft: { relPath: 'a.md' } } }), /memory_write\.proposal\.draft\.content/);
+});
+
+test('memory_write rejects missing or bogus confidence', async () => {
+  const { ctx, registered } = makeCtx();
+  plugin.apply(ctx);
+  const write = registered.find((d) => d.name === 'memory_write');
+  const base = { module: 'm', category: 'fact', evidence: ['e'], draft: { relPath: 'a.md', content: '# x' } };
+  await assert.rejects(write.execute({ proposal: { ...base } }), /memory_write\.proposal\.confidence/);
+  await assert.rejects(write.execute({ proposal: { ...base, confidence: '' } }), /memory_write\.proposal\.confidence/);
+  await assert.rejects(write.execute({ proposal: { ...base, confidence: 'extreme' } }), /memory_write\.proposal\.confidence/);
 });
