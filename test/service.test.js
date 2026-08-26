@@ -47,7 +47,7 @@ test('write: 落盘到正确路径且 index-sync 被调用', () => {
 test('write: index-sync 非零退出不使写失败', () => {
   const d = mkdtempSync(join(tmpdir(), 'mem-svc-'));
   try {
-    const run = () => { throw new Error('script failed (1): broken links'); };
+    const run = () => { const e = new Error('script failed (1): broken links'); e.status = 1; e.stderr = 'broken links'; throw e; };
     const svc = makeMemoryService({ memoryRoot: d, scriptsDir: 'S', node: 'node', run });
     const draft = { relPath: 'a/b.md', content: '# B\n' };
     const r = svc.write(draft);
@@ -55,6 +55,18 @@ test('write: index-sync 非零退出不使写失败', () => {
     assert.equal(readFileSync(join(d, 'a', 'b.md'), 'utf8'), draft.content);
     assert.equal(r.index, null);
     assert.equal(r.written, join(d, 'a', 'b.md'));
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('write: index-sync 真实失败（exit-2）向上传播', () => {
+  const d = mkdtempSync(join(tmpdir(), 'mem-svc-'));
+  try {
+    const run = () => { const e = new Error('script failed (2): boom'); e.status = 2; e.stderr = 'boom'; throw e; };
+    const svc = makeMemoryService({ memoryRoot: d, scriptsDir: 'S', node: 'node', run });
+    const draft = { relPath: 'a/b.md', content: '# B\n' };
+    assert.throws(() => svc.write(draft), /script failed \(2\)/);
   } finally {
     rmSync(d, { recursive: true, force: true });
   }
@@ -84,4 +96,8 @@ test('runScript: 非零退出抛错', () => {
   } finally {
     rmSync(d, { recursive: true, force: true });
   }
+});
+
+test('runScript: spawn 失败报告 r.error 而非 (null)', () => {
+  assert.throws(() => runScript('definitely-not-a-real-node-exe', 'x.mjs', []), /script spawn failed/);
 });
