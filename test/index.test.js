@@ -81,3 +81,24 @@ test('apply does not throw when every service is absent', () => {
   const ctx = { config: {}, get() { return undefined; }, on() { return () => {}; } };
   assert.doesNotThrow(() => plugin.apply(ctx));
 });
+
+test('memory_search validates its args before dispatch', async () => {
+  const { ctx, registered } = makeCtx();
+  plugin.apply(ctx);
+  const search = registered.find((d) => d.name === 'memory_search');
+  await assert.rejects(search.execute({}), /memory_search\.query/);
+  await assert.rejects(search.execute({ query: '' }), /memory_search\.query/);
+  await assert.rejects(search.execute({ query: 'x', top: -1 }), /memory_search\.top/);
+  await assert.rejects(search.execute({ query: 'x', top: 2.5 }), /memory_search\.top/);
+});
+
+test('memory_write validates proposal before dispatch', async () => {
+  const { ctx, registered } = makeCtx();
+  plugin.apply(ctx);
+  const write = registered.find((d) => d.name === 'memory_write');
+  await assert.rejects(write.execute({}), /memory_write\.proposal/);
+  await assert.rejects(write.execute({ proposal: null }), /memory_write\.proposal/);
+  await assert.rejects(write.execute({ proposal: {} }), /memory_write\.proposal\.module/);
+  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', evidence: [] } }), /memory_write\.proposal\.evidence/);
+  await assert.rejects(write.execute({ proposal: { module: 'm', category: 'fact', evidence: ['e'] } }), /memory_write\.proposal\.draft/);
+});
