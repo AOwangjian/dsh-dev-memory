@@ -85,6 +85,31 @@ test('apply does not throw when every service is absent', () => {
   assert.doesNotThrow(() => plugin.apply(ctx));
 });
 
+test('apply swallows service failures and reports them on the panel snapshot', () => {
+  const routes = [];
+  const ctx = {
+    get(key) {
+      if (key === contract.SERVICES.TOOLS) return { register() { throw new Error('tools exploded'); } };
+      if (key === contract.SERVICES.SYSTEM_PROMPT) return { section() { throw new Error('prompt exploded'); } };
+      return undefined;
+    },
+    on() { throw new Error('events exploded'); },
+    inject(_deps, fn) {
+      return fn({
+        effect: (cb) => cb(),
+        webServer: { register(def) { routes.push(def); return () => {}; } },
+      });
+    },
+  };
+  assert.doesNotThrow(() => plugin.apply(ctx));
+  const stateRoute = routes.find((r) => r.path === '/dsh-dev-memory/state');
+  assert.ok(stateRoute, 'HTTP panel routes must still mount after a service failure');
+  let body = '';
+  stateRoute.handler({ method: 'GET', url: '/dsh-dev-memory/state', headers: {} }, { writeHead() {}, end(chunk = '') { body += chunk; } });
+  const state = JSON.parse(body);
+  assert.match(String(state.pluginError || ''), /exploded/);
+});
+
 test('memory_search validates its args before dispatch', async () => {
   const { ctx, registered } = makeCtx();
   plugin.apply(ctx);

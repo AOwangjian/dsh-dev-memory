@@ -243,6 +243,85 @@ test('memory tool cards parse search, write, and health blocks', async () => {
   assert.equal(health.issueCount, 2);
 });
 
+function collectText(node) {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(collectText).join('');
+  if (typeof node === 'object') {
+    const kids = node.children || (node.props && node.props.children) || [];
+    return collectText(Array.isArray(kids) ? kids : [kids]);
+  }
+  return '';
+}
+
+test('apply never throws on undeclared Cordis properties and keeps the settings panel', () => {
+  const plugin = materialize();
+  assert.deepEqual(plugin.inject, ['slots']);
+  const registrations = [];
+  const target = {
+    slots: {
+      inject(_key, callback) {
+        const value = callback();
+        return typeof value === 'function' ? value : () => {};
+      },
+      register(options, component) {
+        registrations.push({ options, component });
+        return () => {};
+      },
+    },
+    get(name) {
+      if (name === 'slots') return this.slots;
+      throw new Error(`cannot get property "${name}" without inject`);
+    },
+  };
+  const ctx = new Proxy(target, {
+    get(obj, prop) {
+      if (typeof prop === 'symbol') return obj[prop];
+      if (prop === 'get' || prop === 'inject' || prop === 'on') return obj[prop];
+      if (!plugin.inject.includes(String(prop))) {
+        throw new Error(`cannot get property "${String(prop)}" without inject`);
+      }
+      return obj[prop];
+    },
+  });
+  assert.doesNotThrow(() => plugin.apply(ctx));
+  const section = registrations.find((row) => row.options.name === 'settings.section');
+  assert.ok(section, 'settings panel must still register when conversationEvents is unavailable');
+  const tail = registrations.find((row) => row.options.name === 'conversation.chat.turnTail');
+  assert.equal(tail, undefined);
+});
+
+test('optional conversation wiring failures surface in the panel instead of crashing apply', () => {
+  const plugin = materialize();
+  const registrations = [];
+  const ctx = {
+    slots: {
+      inject(_key, callback) {
+        const value = callback();
+        return typeof value === 'function' ? value : () => {};
+      },
+      register(options, component) {
+        registrations.push({ options, component });
+        return () => {};
+      },
+    },
+    get(name) {
+      if (name === 'slots') return this.slots;
+      if (name === 'conversationEvents') {
+        return { register() { throw new Error('cannot get property "conversationEvents" without inject'); } };
+      }
+      return undefined;
+    },
+  };
+  assert.doesNotThrow(() => plugin.apply(ctx));
+  const section = registrations.find((row) => row.options.name === 'settings.section');
+  assert.ok(section);
+  const tree = section.component();
+  const text = collectText(tree);
+  assert.match(text, /conversationEvents/);
+  assert.match(text, /without inject/);
+});
+
 test('registers memory toolviews and a turn-tail selector for successful writes', () => {
   const plugin = materialize();
   const registrations = [];
