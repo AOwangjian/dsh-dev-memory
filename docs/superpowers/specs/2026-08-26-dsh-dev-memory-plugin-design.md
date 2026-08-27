@@ -122,7 +122,7 @@ dsh-dev-memory/
 ## 9. 存储路径
 
 - canonical = `~/.claude/projects/<slug>/memory/`（dev-memory 官方默认，零迁移，与 Claude Code 共享）。
-- slug 推导：workspace 路径 `:` / `\` → `-`（`D:\bydk\F20_Client\Fish20` → `D--bydk-F20_Client-Fish20`）。
+- slug 推导：workspace 路径 `:` / `\` / `/` / `_` → `-`（`D:\bydk\F20_Client\Fish20` → `D--bydk-F20-Client-Fish20`）。
 - 记忆根 `git init` 以支持回滚。
 - `.cursor/memory`（Cursor 平铺记忆）废弃；其存量（如 30KB DevLog）作为独立一次性迁移任务，后续处理，不属插件范围。
 

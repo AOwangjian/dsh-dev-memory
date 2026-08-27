@@ -42,7 +42,7 @@ dsh plugin --profile <name> add <local-path>
 
 | 键 | 默认 | 含义 |
 |---|---|---|
-| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | 记忆根目录；slug = workspace 路径把冒号与目录分隔符替换成 `-` |
+| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | 记忆根目录；slug = workspace 路径把冒号、目录分隔符和下划线替换成 `-` |
 | `scriptsDir` | `''` → `~/.dsh/skills/dev-memory/scripts` | dev-memory 脚本目录 |
 | `maxInjectTokens` | `1500` | 会话开始注入记忆的 token 预算 |
 | `autoWriteLevels` | `[2, 3]` | 允许自动写入的模块级别（Level 1 保留人工确认） |
@@ -222,7 +222,7 @@ the profile layer:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | Memory root; slug = workspace path with the colon and directory separator replaced by `-` |
+| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | Memory root; slug = workspace path with the colon, directory separator, and underscore replaced by `-` |
 | `scriptsDir` | `''` → `~/.dsh/skills/dev-memory/scripts` | dev-memory scripts directory |
 | `maxInjectTokens` | `1500` | Token budget for the memory injected at session start |
 | `autoWriteLevels` | `[2, 3]` | Module levels allowed to auto-write (Level 1 keeps manual confirmation) |

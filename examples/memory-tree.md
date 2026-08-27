@@ -1,30 +1,30 @@
 # Memory tree — 记忆目录树样例
 
 > 这是插件落盘后，`~/.claude/projects/<slug>/memory` 下的**目录结构**与**文件内容**样例。
-> slug = workspace 路径把冒号与目录分隔符替换成 `-`。下面以 workspace
-> `D:ydkF20_ClientFish20` 为例，其 slug 为 `D--bydk-F20_Client-Fish20`。
+> slug = workspace 路径把冒号、目录分隔符和下划线替换成 `-`。下面以 workspace
+> `D:\bydk\F20_Client\Fish20` 为例，其 slug 为 `D--bydk-F20-Client-Fish20`。
 
 canonical 根（文档用 POSIX 形式）：
 
 ```
-~/.claude/projects/D--bydk-F20_Client-Fish20/memory/
+~/.claude/projects/D--bydk-F20-Client-Fish20/memory/
 ```
 
 Windows 下的真实绝对路径：
 
 ```
-C:Users<you>.claudeprojectsD--bydk-F20_Client-Fish20memory
+C:Users<you>.claudeprojectsD--bydk-F20-Client-Fish20memory
 ```
 
 > This is a sample **directory layout** and **file contents** under
 > `~/.claude/projects/<slug>/memory` after the plugin writes. slug = workspace path
-> with the colon and directory separator replaced by `-`. Below, for workspace
-> `D:ydkF20_ClientFish20`, the slug is `D--bydk-F20_Client-Fish20`.
+> with the colon, directory separator, and underscore replaced by `-`. Below, for workspace
+> `D:\bydk\F20_Client\Fish20`, the slug is `D--bydk-F20-Client-Fish20`.
 
 ## 目录结构 / Layout
 
 ```
-D--bydk-F20_Client-Fish20/memory/
+D--bydk-F20-Client-Fish20/memory/
 ├── MEMORY.md                    # 全局索引（health 检查其存在性）
 ├── README.md                    # 顶层 README 索引
 ├── .audit/

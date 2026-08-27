@@ -193,14 +193,14 @@ test('workspace helpers merge a discovered memory library onto the matching boun
   const api = await loadClientExports();
   const rows = [
     { id: 'D--bydk-F20_Client-Fish20', name: 'Fish20', verified: true, workspacePath: String.raw`D:\bydk\F20_Client\Fish20`, memoryRoot: String.raw`C:\mem\D--bydk-F20_Client-Fish20\memory` },
-    { id: 'D--bydk-F20_Client-Fish20', name: 'D--bydk-F20_Client-Fish20', verified: false, workspacePath: null, memoryRoot: String.raw`C:\mem\D--bydk-F20_Client-Fish20\memory` },
+    { id: 'D--bydk-F20-Client-Fish20', name: 'Fish20', verified: false, workspacePath: null, memoryRoot: String.raw`C:\mem\D--bydk-F20-Client-Fish20\memory` },
     { id: 'D--bydk-F20-Client', name: 'D--bydk-F20-Client', verified: false, workspacePath: null, memoryRoot: String.raw`C:\mem\D--bydk-F20-Client\memory` },
     { id: 'D--Projects-dsh-dev-memory', name: 'dsh-dev-memory', verified: true, workspacePath: String.raw`D:\Projects\dsh-dev-memory`, memoryRoot: String.raw`C:\mem\D--Projects-dsh-dev-memory\memory` },
     { id: 'D--bydk-dsh-dev-memory', name: 'dsh-dev-memory', verified: true, workspacePath: String.raw`D:\bydk\dsh-dev-memory`, memoryRoot: String.raw`C:\mem\D--bydk-dsh-dev-memory\memory` },
   ];
   const merged = api.mergeWorkspaceRows(rows);
   assert.equal(JSON.stringify(merged.map((x) => x.id)), JSON.stringify([
-    'D--bydk-F20_Client-Fish20',
+    'D--bydk-F20-Client-Fish20',
     'D--bydk-F20-Client',
     'D--Projects-dsh-dev-memory',
     'D--bydk-dsh-dev-memory',

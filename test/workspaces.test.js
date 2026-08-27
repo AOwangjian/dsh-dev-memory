@@ -40,7 +40,7 @@ test('upsertVerified derives the exact strict slug and preserves first seen meta
   const { registry, projectsRoot } = fixture(t, [1200, 1300]);
   const first = registry.upsertVerified(String.raw`D:\bydk\F20_Client\Fish20`);
   const second = registry.upsertVerified(String.raw`D:\bydk\F20_Client\Fish20`);
-  assert.equal(first.id, 'D--bydk-F20_Client-Fish20');
+  assert.equal(first.id, 'D--bydk-F20-Client-Fish20');
   assert.equal(first.memoryRoot, join(projectsRoot, first.id, 'memory'));
   assert.equal(second.firstSeenAt, 1200);
   assert.equal(second.lastSeenAt, 1300);

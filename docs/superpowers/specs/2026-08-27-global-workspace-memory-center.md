@@ -28,10 +28,10 @@ Schema:
   "version": 1,
   "workspaces": [
     {
-      "id": "D--bydk-F20_Client-Fish20",
+      "id": "D--bydk-F20-Client-Fish20",
       "name": "Fish20",
       "workspacePath": "D:\\bydk\\F20_Client\\Fish20",
-      "memoryRoot": "C:\\Users\\wangjian\\.claude\\projects\\D--bydk-F20_Client-Fish20\\memory",
+      "memoryRoot": "C:\\Users\\wangjian\\.claude\\projects\\D--bydk-F20-Client-Fish20\\memory",
       "verified": true,
       "pinned": false,
       "firstSeenAt": 1787810000000,

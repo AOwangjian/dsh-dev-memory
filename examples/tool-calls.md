@@ -133,7 +133,7 @@ Level 1（`moduleLevel: 1`，新主域需人工确认）：
 ```json
 {
   "summary": {
-    "memoryRoot": "C:\\Users\\you\\.claude\\projects\\D--bydk-F20_Client-Fish20\\memory",
+    "memoryRoot": "C:\\Users\\you\\.claude\\projects\\D--bydk-F20-Client-Fish20\\memory",
     "markdownFiles": 6,
     "directories": 4,
     "readmes": 3,
