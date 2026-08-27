@@ -130,6 +130,30 @@ test('session-start inject and goal-complete reminder skip when enabled is false
   assert.equal(injected.length, 0, 'goal-complete reminder skipped when disabled');
 });
 
+test('auto mode waits for a live session cwd instead of using host or registry cwd', () => {
+  const { ctx } = makeCtx();
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(ctx);
+  const stateRoute = routes.find((r) => r.path === '/dsh-dev-memory/state');
+  let body = '';
+  stateRoute.handler({ method: 'GET', headers: {} }, { writeHead() {}, end(chunk = '') { body += chunk; } });
+  const state = JSON.parse(body);
+  assert.equal(state.config.memoryRoot, null);
+  assert.equal(state.config.workspacePath, null);
+  assert.equal(state.config.rootMode, 'auto-waiting');
+  assert.match(state.health.error, /active session workspace/i);
+  assert.deepEqual(state.audit, []);
+});
+
+test('A-convention slug replaces POSIX separators without escaping the projects root', () => {
+  assert.equal(plugin.slugOf('/work/app'), '-work-app');
+  assert.match(plugin.deriveRoot('/work/app'), /[\\/]\.claude[\\/]projects[\\/]-work-app[\\/]memory$/);
+});
+
 test('session cwd becomes the A-convention memoryRoot used by the panel', () => {
   const { ctx, handlers } = makeCtx();
   const routes = [];

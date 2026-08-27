@@ -125,4 +125,6 @@ test('panel exposes automatic root mode and workspace source', async () => {
   assert.match(src, /rootMode/);
   assert.match(src, /workspacePath/);
   assert.match(src, /Use Auto/);
+  assert.match(src, /auto-waiting/);
+  assert.match(src, /Waiting for active session/);
 });
