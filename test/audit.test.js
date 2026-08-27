@@ -8,11 +8,13 @@ import { join } from 'node:path';
 test('append 后能读回', () => {
   const d = mkdtempSync(join(tmpdir(), 'audit-'));
   const p = join(d, 'audit.jsonl');
-  appendAudit(p, { module: 'fishing/settlement', action: 'write' });
+  const first = appendAudit(p, { module: 'fishing/settlement', action: 'write' });
   appendAudit(p, { module: 'system', action: 'create' });
   const rows = readAudit(p);
   assert.equal(rows.length, 2);
   assert.equal(rows[0].module, 'fishing/settlement');
+  assert.equal(typeof first.ts, 'number');
+  assert.equal(first.module, 'fishing/settlement');
   rmSync(d, { recursive: true, force: true });
 });
 

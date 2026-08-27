@@ -1,6 +1,9 @@
 // dsh-dev-memory — Task 7 wiring test (mock ctx, no real host).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { contract } from '../lib/contract.js';
 
 const plugin = await import('../lib/index.js');
@@ -231,5 +234,108 @@ test('ctx.inject(["webServer"]) mounts state and config routes', () => {
   };
   plugin.apply(ctx);
   assert.deepEqual(injected, ['webServer']);
-  assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/state']);
+  assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/state', '/dsh-dev-memory/workspaces']);
+});
+
+function isolatedApply(t, extra = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-ws-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const { ctx, registered, handlers } = makeCtx();
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  const registryPath = join(root, 'workspaces.json');
+  const projectsRoot = join(root, 'projects');
+  mkdirSync(projectsRoot, { recursive: true });
+  plugin.apply(ctx, { registryPath, projectsRoot, profile: 'web', scriptsDir: join(root, 'scripts'), ...extra });
+  const byPath = Object.fromEntries(routes.map((r) => [r.path, r]));
+  return { root, ctx, registered, handlers, byPath, registryPath, projectsRoot };
+}
+
+function getJson(route, request) {
+  let body = '';
+  const res = { status: 200, writeHead(status) { this.status = status; }, end(chunk = '') { body += chunk; } };
+  return Promise.resolve(route.handler(request, res)).then(() => ({ status: res.status, json: body ? JSON.parse(body) : null }));
+}
+
+test('session start registers the live cwd as a verified workspace', (t) => {
+  const { handlers, registryPath } = isolatedApply(t);
+  const agent = { id: 's1', session: { id: 's1', header: { cwd: 'D:\\bydk\\F20_Client\\Fish20' } }, inject() {} };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START) || []) h({ agent });
+  const stored = JSON.parse(readFileSync(registryPath, 'utf8'));
+  const row = stored.workspaces.find((x) => x.id === 'D--bydk-F20_Client-Fish20');
+  assert.equal(row.verified, true);
+  assert.equal(row.workspacePath, 'D:\\bydk\\F20_Client\\Fish20');
+});
+
+test('browsing another workspace does not change the active write target', async (t) => {
+  const { handlers, byPath, projectsRoot } = isolatedApply(t);
+  const agent = { id: 's1', session: { id: 's1', header: { cwd: 'D:\\bydk\\F20_Client\\Fish20' } }, inject() {} };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START) || []) h({ agent });
+  const otherId = 'D--other';
+  mkdirSync(join(projectsRoot, otherId, 'memory'), { recursive: true });
+  writeFileSync(join(projectsRoot, otherId, 'memory', 'note.md'), '# other');
+  const listed = await getJson(byPath['/dsh-dev-memory/workspaces'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/workspaces' });
+  assert.equal(listed.json.activeWorkspaceId, 'D--bydk-F20_Client-Fish20');
+  const browse = await getJson(byPath['/dsh-dev-memory/state'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/state?workspace=' + otherId });
+  assert.equal(browse.status, 200);
+  assert.match(browse.json.config.memoryRoot, /D--other[\\/]memory$/);
+  assert.equal(browse.json.browseWorkspaceId, otherId);
+  const active = await getJson(byPath['/dsh-dev-memory/state'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/state' });
+  assert.match(active.json.config.memoryRoot, /D--bydk-F20_Client-Fish20[\\/]memory$/);
+  assert.equal(active.json.config.workspacePath, 'D:\\bydk\\F20_Client\\Fish20');
+});
+
+test('memory tools enrich results with workspace metadata and mark lastWriteAt only on success', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-ws-write-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const memoryRoot = join(root, 'isolated-memory');
+  mkdirSync(memoryRoot, { recursive: true });
+  writeFileSync(join(memoryRoot, 'note.md'), '# fish');
+  const { registered, handlers, registryPath } = isolatedApply(t, {
+    autoWriteLevels: [2, 3],
+    memoryRoot,
+    scriptsDir: join(homedir(), '.dsh', 'skills', 'dev-memory', 'scripts'),
+  });
+  const agent = { id: 's1', session: { id: 's1', header: { cwd: 'D:\\bydk\\F20_Client\\Fish20' } }, inject() {} };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START) || []) h({ agent });
+  const search = registered.find((d) => d.name === 'memory_search');
+  const write = registered.find((d) => d.name === 'memory_write');
+  const health = registered.find((d) => d.name === 'memory_health');
+  search.execute = async () => ({ query: 'q', results: [{ file: 'note.md' }] });
+  const originalWrite = write.execute;
+  const rejected = await write.execute({
+    proposal: {
+      module: 'fishing/core', category: 'fact', confidence: 'high', evidence: ['a'],
+      draft: { relPath: 'fishing/core.md', content: '# skipped' }, moduleLevel: 1,
+    },
+  }, { agent });
+  assert.equal(rejected.written, false);
+  const before = JSON.parse(readFileSync(registryPath, 'utf8')).workspaces[0].lastWriteAt;
+  assert.equal(before, null);
+  const created = await originalWrite.call(write, {
+    proposal: {
+      module: 'fishing/core', category: 'fact', confidence: 'high', evidence: ['a'],
+      draft: { relPath: 'fishing/core.md', content: '# kept' }, moduleLevel: 2,
+    },
+  }, { agent });
+  assert.equal(created.written, true);
+  assert.equal(created.workspace.id, 'D--bydk-F20_Client-Fish20');
+  assert.equal(typeof created.audit.ts, 'number');
+  const after = JSON.parse(readFileSync(registryPath, 'utf8')).workspaces[0].lastWriteAt;
+  assert.equal(typeof after, 'number');
+  const healthy = await health.execute({}, { agent });
+  assert.equal(healthy.workspace.id, 'D--bydk-F20_Client-Fish20');
+});
+
+test('adding a workspace requires an existing directory', async (t) => {
+  const { byPath } = isolatedApply(t);
+  const missing = await getJson(byPath['/dsh-dev-memory/workspaces'], {
+    method: 'POST',
+    headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270', 'content-type': 'application/json' },
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ action: 'add', workspacePath: join(tmpdir(), 'no-such-ws') })); },
+  });
+  assert.equal(missing.status, 400);
 });

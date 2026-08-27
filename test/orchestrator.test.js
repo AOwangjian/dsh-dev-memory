@@ -98,3 +98,13 @@ test('audit preserves create/update action returned by service.write', async () 
   assert.equal(created.audit.action, 'create');
   assert.equal(updated.audit.action, 'update');
 });
+
+test('successful write returns the stamped audit timestamp', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'orch-ts-'));
+  const auditFile = join(d, 'a.jsonl');
+  const r = await runWritePass({ proposal: { ...ok, moduleLevel: 2 }, service: { write: async () => ({ action: 'create' }) }, auditPath: auditFile, autoWriteLevels: [2] });
+  assert.equal(typeof r.audit.ts, 'number');
+  const stored = JSON.parse(readFileSync(auditFile, 'utf8').trim());
+  assert.equal(stored.ts, r.audit.ts);
+  rmSync(d, { recursive: true, force: true });
+});

@@ -154,3 +154,63 @@ test('POST /dsh-dev-memory/config rejects missing origin', async () => {
   await byPath['/dsh-dev-memory/config'].handler(jsonReq('POST', { enabled: false }, { host: '127.0.0.1:12393' }), res);
   assert.equal(res.status, 403);
 });
+
+test('GET /dsh-dev-memory/workspaces returns registry rows and the active workspace id', async () => {
+  const webServer = makeWebServer();
+  mountDevMemoryRoutes(webServer, {
+    getSnapshot() { return { config: {}, audit: [], health: {}, pendingLevel1: [] }; },
+    updateConfig() { return {}; },
+    listWorkspaces() { return { workspaces: [{ id: 'D--fish' }], activeWorkspaceId: 'D--fish' }; },
+  });
+  const route = Object.fromEntries(webServer.routes.map((r) => [r.path, r]))['/dsh-dev-memory/workspaces'];
+  assert.ok(route);
+  const res = mockRes();
+  await route.handler({ method: 'GET', headers: {}, url: '/dsh-dev-memory/workspaces' }, res);
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(res.body), { workspaces: [{ id: 'D--fish' }], activeWorkspaceId: 'D--fish' });
+});
+
+test('GET /dsh-dev-memory/state?workspace=id is forwarded to the snapshot handler', async () => {
+  const webServer = makeWebServer();
+  let seen;
+  mountDevMemoryRoutes(webServer, {
+    getSnapshot(request) {
+      seen = request.url;
+      if (String(request.url).includes('missing')) {
+        const err = new Error('unknown workspace: missing');
+        err.status = 404;
+        throw err;
+      }
+      return { config: { memoryRoot: '/browse/memory' }, audit: [], health: {}, pendingLevel1: [], browseWorkspaceId: 'D--other' };
+    },
+    updateConfig() { return {}; },
+  });
+  const route = Object.fromEntries(webServer.routes.map((r) => [r.path, r]))['/dsh-dev-memory/state'];
+  const ok = mockRes();
+  await route.handler({ method: 'GET', headers: {}, url: '/dsh-dev-memory/state?workspace=D--other' }, ok);
+  assert.equal(seen, '/dsh-dev-memory/state?workspace=D--other');
+  assert.equal(ok.status, 200);
+  assert.equal(JSON.parse(ok.body).browseWorkspaceId, 'D--other');
+  const missing = mockRes();
+  await route.handler({ method: 'GET', headers: {}, url: '/dsh-dev-memory/state?workspace=missing' }, missing);
+  assert.equal(missing.status, 404);
+});
+
+test('POST /dsh-dev-memory/workspaces mutates only from a trusted origin', async () => {
+  const webServer = makeWebServer();
+  let command;
+  mountDevMemoryRoutes(webServer, {
+    getSnapshot() { return {}; },
+    updateConfig() { return {}; },
+    mutateWorkspace(body) { command = body; return { id: body.id, pinned: true }; },
+  });
+  const route = Object.fromEntries(webServer.routes.map((r) => [r.path, r]))['/dsh-dev-memory/workspaces'];
+  const denied = mockRes();
+  await route.handler(jsonReq('POST', { action: 'pin', id: 'D--fish', pinned: true }, { origin: 'http://evil.example', host: '127.0.0.1:12393' }), denied);
+  assert.equal(denied.status, 403);
+  const ok = mockRes();
+  await route.handler(jsonReq('POST', { action: 'pin', id: 'D--fish', pinned: true }, trustedHeaders()), ok);
+  assert.equal(ok.status, 200);
+  assert.equal(JSON.parse(ok.body).ok, true);
+  assert.equal(command.action, 'pin');
+});
