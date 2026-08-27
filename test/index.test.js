@@ -281,8 +281,11 @@ test('browsing another workspace does not change the active write target', async
   assert.equal(listed.json.activeWorkspaceId, 'D--bydk-F20_Client-Fish20');
   const browse = await getJson(byPath['/dsh-dev-memory/state'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/state?workspace=' + otherId });
   assert.equal(browse.status, 200);
-  assert.match(browse.json.config.memoryRoot, /D--other[\\/]memory$/);
+  assert.match(browse.json.config.memoryRoot, /D--bydk-F20_Client-Fish20[\\/]memory$/);
+  assert.equal(browse.json.config.workspacePath, 'D:\\bydk\\F20_Client\\Fish20');
   assert.equal(browse.json.browseWorkspaceId, otherId);
+  assert.equal(browse.json.browseWorkspace.id, otherId);
+  assert.match(browse.json.browseWorkspace.memoryRoot, /D--other[\\/]memory$/);
   const active = await getJson(byPath['/dsh-dev-memory/state'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/state' });
   assert.match(active.json.config.memoryRoot, /D--bydk-F20_Client-Fish20[\\/]memory$/);
   assert.equal(active.json.config.workspacePath, 'D:\\bydk\\F20_Client\\Fish20');
