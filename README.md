@@ -149,7 +149,7 @@ lib/
 
 - 工作区选择器只改变面板浏览目标，不会把当前会话绑定到另一个项目。
 - 仅扫描发现的记忆库在打开对应项目前可能没有真实 `workspacePath`。
-- 删除工作区登记不会删除记忆文件。
+- 从列表隐藏工作区登记不会删除记忆文件。
 
 ## 开发
 
@@ -339,7 +339,7 @@ collapsible cards. Successful writes also appear as a compact turn-tail summary.
   the current conversation write root.
 - Discovered-only memory libraries may lack a real `workspacePath` until the
   matching project is opened.
-- Removing a registry entry never deletes memory files.
+- Hiding a registry entry from the list never deletes memory files.
 
 ## Development
 

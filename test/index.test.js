@@ -367,3 +367,20 @@ test('adding a workspace requires an existing directory', async (t) => {
   });
   assert.equal(missing.status, 400);
 });
+
+test('removing a workspace stays gone after the next workspaces list', async (t) => {
+  const { handlers, byPath, projectsRoot } = isolatedApply(t);
+  const agent = { id: 's1', session: { id: 's1', header: { cwd: 'D:\\bydk\\F20_Client\\Fish20' } }, inject() {} };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START) || []) h({ agent });
+  mkdirSync(join(projectsRoot, 'D--bydk-F20_Client-Fish20', 'memory'), { recursive: true });
+  writeFileSync(join(projectsRoot, 'D--bydk-F20_Client-Fish20', 'memory', 'keep.md'), '# keep');
+  const removed = await getJson(byPath['/dsh-dev-memory/workspaces'], {
+    method: 'POST',
+    headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270', 'content-type': 'application/json' },
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ action: 'remove', id: 'D--bydk-F20_Client-Fish20' })); },
+  });
+  assert.equal(removed.status, 200);
+  const listed = await getJson(byPath['/dsh-dev-memory/workspaces'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/workspaces' });
+  assert.equal(listed.status, 200);
+  assert.equal((listed.json.workspaces || []).some((row) => row.id === 'D--bydk-F20_Client-Fish20'), false);
+});

@@ -202,10 +202,22 @@ test('panel source loads workspaces and never posts browse selection to /config'
   assert.match(src, /action:'pin'/);
   assert.match(src, /action:'rename'/);
   assert.match(src, /action:'remove'/);
+  assert.match(src, /从列表隐藏/);
+  assert.match(src, /不会删除记忆目录/);
   assert.match(src, /打开工作目录/);
   assert.match(src, /打开记忆目录/);
   assert.match(src, /\/dsh-dev-memory\/open/);
   assert.doesNotMatch(src, /postConfig\(\{[^}]*workspace/);
+});
+
+test('removing a registration reloads the current session instead of the deleted browse target', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+  assert.match(src, /action===[\"']remove[\"']/);
+  assert.match(src, /setBrowseId\(['\"]['\"]\)/);
+  assert.match(src, /load\(['\"]['\"]\)/);
 });
 
 test('memory tool cards parse search, write, and health blocks', async () => {
