@@ -189,6 +189,26 @@ test('workspace helpers filter, label, and keep browse URLs read-only', async ()
   assert.equal(api.browseStateUrl(''), '/dsh-dev-memory/state');
 });
 
+test('workspace helpers merge a discovered memory library onto the matching bound workspace', async () => {
+  const api = await loadClientExports();
+  const rows = [
+    { id: 'D--bydk-F20_Client-Fish20', name: 'Fish20', verified: true, workspacePath: String.raw`D:\bydk\F20_Client\Fish20`, memoryRoot: String.raw`C:\mem\D--bydk-F20_Client-Fish20\memory` },
+    { id: 'D--bydk-F20_Client-Fish20', name: 'D--bydk-F20_Client-Fish20', verified: false, workspacePath: null, memoryRoot: String.raw`C:\mem\D--bydk-F20_Client-Fish20\memory` },
+    { id: 'D--bydk-F20-Client', name: 'D--bydk-F20-Client', verified: false, workspacePath: null, memoryRoot: String.raw`C:\mem\D--bydk-F20-Client\memory` },
+    { id: 'D--Projects-dsh-dev-memory', name: 'dsh-dev-memory', verified: true, workspacePath: String.raw`D:\Projects\dsh-dev-memory`, memoryRoot: String.raw`C:\mem\D--Projects-dsh-dev-memory\memory` },
+    { id: 'D--bydk-dsh-dev-memory', name: 'dsh-dev-memory', verified: true, workspacePath: String.raw`D:\bydk\dsh-dev-memory`, memoryRoot: String.raw`C:\mem\D--bydk-dsh-dev-memory\memory` },
+  ];
+  const merged = api.mergeWorkspaceRows(rows);
+  assert.equal(JSON.stringify(merged.map((x) => x.id)), JSON.stringify([
+    'D--bydk-F20_Client-Fish20',
+    'D--bydk-F20-Client',
+    'D--Projects-dsh-dev-memory',
+    'D--bydk-dsh-dev-memory',
+  ]));
+  assert.equal(merged[0].verified, true);
+  assert.equal(merged[0].workspacePath, String.raw`D:\bydk\F20_Client\Fish20`);
+});
+
 test('panel source loads workspaces and never posts browse selection to /config', async () => {
   const { readFileSync } = await import('node:fs');
   const { fileURLToPath } = await import('node:url');
