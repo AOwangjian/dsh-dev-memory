@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { makeWorkspaceRegistry } from '../lib/workspaces.js';
@@ -54,9 +54,7 @@ test('scan never downgrades an existing verified workspace binding', (t) => {
   registry.mutate({ action: 'rename', id: verified.id, name: 'Custom Fish' });
   registry.mutate({ action: 'pin', id: verified.id, pinned: true });
   mkdirSync(verified.memoryRoot, { recursive: true });
-
   const scanned = registry.scan().find(x => x.id === verified.id);
-
   assert.equal(scanned.verified, true);
   assert.equal(scanned.workspacePath, String.raw`D:\bydk\F20_Client\Fish20`);
   assert.equal(scanned.name, 'Custom Fish');
@@ -96,7 +94,9 @@ test('corrupt registry is backed up before replacement', (t) => {
   mkdirSync(dirname(registryPath), { recursive: true });
   writeFileSync(registryPath, '{broken');
   assert.deepEqual(registry.list(), []);
-  assert.equal(readFileSync(join(dirname(registryPath), 'workspaces.corrupt.777.json'), 'utf8'), '{broken');
+  const backups = readdirSync(dirname(registryPath)).filter((name) => name.startsWith('workspaces.corrupt.'));
+  assert.equal(backups.length, 1);
+  assert.equal(readFileSync(join(dirname(registryPath), backups[0]), 'utf8'), '{broken');
   assert.deepEqual(stored(registryPath), { version: 1, workspaces: [] });
 });
 
@@ -121,8 +121,37 @@ test('missing registry restores a valid previous file after interrupted replacem
     }],
   };
   writeFileSync(registryPath + '.previous', JSON.stringify(previous));
-
   assert.deepEqual(registry.list(), previous.workspaces);
   assert.deepEqual(stored(registryPath), previous);
   assert.equal(existsSync(registryPath + '.previous'), false);
+});
+
+test('list preserves a concurrent write instead of replacing it with an empty snapshot', (t) => {
+  const { registry, registryPath, projectsRoot } = fixture(t, [1, 2, 3]);
+  registry.list();
+  const concurrent = {
+    version: 1,
+    workspaces: [{
+      id: 'C--child', name: 'Child', workspacePath: String.raw`C:\child`,
+      memoryRoot: join(projectsRoot, 'C--child', 'memory'), verified: true, pinned: false,
+      firstSeenAt: 5, lastSeenAt: 5, lastWriteAt: null, sourceProfiles: ['child'],
+    }],
+  };
+  writeFileSync(registryPath, JSON.stringify(concurrent, null, 2) + '\n');
+  const listed = registry.list();
+  assert.equal(listed.some((row) => row.id === 'C--child'), true);
+  assert.equal(stored(registryPath).workspaces[0].id, 'C--child');
+});
+
+test('corrupt backups keep unique copies when timestamps collide', (t) => {
+  const { registry, registryPath } = fixture(t, [777, 777, 777]);
+  mkdirSync(dirname(registryPath), { recursive: true });
+  writeFileSync(registryPath, '{broken-one');
+  registry.list();
+  writeFileSync(registryPath, '{broken-two');
+  registry.list();
+  const backups = readdirSync(dirname(registryPath)).filter((name) => name.startsWith('workspaces.corrupt.'));
+  assert.equal(backups.length, 2);
+  const bodies = backups.map((name) => readFileSync(join(dirname(registryPath), name), 'utf8')).sort();
+  assert.deepEqual(bodies, ['{broken-one', '{broken-two']);
 });
