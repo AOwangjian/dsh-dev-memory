@@ -124,7 +124,40 @@ test('panel exposes automatic root mode and workspace source', async () => {
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
   assert.match(src, /rootMode/);
   assert.match(src, /workspacePath/);
-  assert.match(src, /Use Auto/);
+  assert.match(src, /恢复自动/);
+  assert.match(src, /memoryRoot:s*''/);
   assert.match(src, /auto-waiting/);
-  assert.match(src, /Waiting for active session/);
+  assert.match(src, /等待活跃会话工作区/);
+});
+
+test('change-log helpers provide action labels, local timestamps, and relative time', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { runInNewContext } = await import('node:vm');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+  const sandbox = { module: { exports: {} }, exports: {} };
+  runInNewContext(src, sandbox);
+  const api = sandbox.module.exports;
+  assert.equal(JSON.stringify(api.actionPresentation('create')), JSON.stringify({ icon: '+', label: '新增', tone: 'create' }));
+  assert.equal(JSON.stringify(api.actionPresentation('update')), JSON.stringify({ icon: '✎', label: '更新', tone: 'update' }));
+  assert.equal(JSON.stringify(api.actionPresentation('write')), JSON.stringify({ icon: '•', label: '写入', tone: 'write' }));
+  assert.equal(api.formatLocalTime(Date.UTC(2026, 7, 27, 7, 42, 7), 0), '2026-08-27 07:42:07');
+  assert.equal(api.formatRelativeTime(1000, 31_000), '刚刚');
+  assert.equal(api.formatRelativeTime(1000, 181_000), '3 分钟前');
+});
+
+test('panel source includes card layout, status switch, button interaction, and save feedback', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+  assert.match(src, /dm-card/);
+  assert.match(src, /dm-status-dot/);
+  assert.match(src, /dm-switch/);
+  assert.match(src, /:hover/);
+  assert.match(src, /:active/);
+  assert.match(src, /保存中/);
+  assert.match(src, /已保存/);
+  assert.match(src, /change-time/);
 });

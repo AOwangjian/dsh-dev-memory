@@ -91,3 +91,10 @@ test('writeConfidenceMin 传入 classify', async () => {
 });
 
 function fakeSvc() { return { write: async () => {}, search: async () => ({}), health: async () => ({}) }; }
+
+test('audit preserves create/update action returned by service.write', async () => {
+  const created = await runWritePass({ proposal: { ...ok, moduleLevel: 2 }, service: { write: async () => ({ action: 'create' }) }, autoWriteLevels: [2] });
+  const updated = await runWritePass({ proposal: { ...ok, moduleLevel: 2 }, service: { write: async () => ({ action: 'update' }) }, autoWriteLevels: [2] });
+  assert.equal(created.audit.action, 'create');
+  assert.equal(updated.audit.action, 'update');
+});

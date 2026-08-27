@@ -128,3 +128,16 @@ test('memoryRoot getter is resolved on each search/write/health call', () => {
     rmSync(d2, { recursive: true, force: true });
   }
 });
+
+test('write returns create first and update when the file already exists', () => {
+  const d = mkdtempSync(join(tmpdir(), 'mem-action-'));
+  try {
+    const run = () => JSON.stringify({ ok: true });
+    const svc = makeMemoryService({ memoryRoot: d, scriptsDir: 'S', node: 'node', run });
+    const draft = { relPath: 'module/a.md', content: '# A\n' };
+    assert.equal(svc.write(draft).action, 'create');
+    assert.equal(svc.write({ ...draft, content: '# A2\n' }).action, 'update');
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
