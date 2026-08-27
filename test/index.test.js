@@ -234,7 +234,7 @@ test('ctx.inject(["webServer"]) mounts state and config routes', () => {
   };
   plugin.apply(ctx);
   assert.deepEqual(injected, ['webServer']);
-  assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/state', '/dsh-dev-memory/workspaces']);
+  assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/open', '/dsh-dev-memory/state', '/dsh-dev-memory/workspaces']);
 });
 
 function isolatedApply(t, extra = {}) {

@@ -202,27 +202,45 @@ test('panel source loads workspaces and never posts browse selection to /config'
   assert.match(src, /action:'pin'/);
   assert.match(src, /action:'rename'/);
   assert.match(src, /action:'remove'/);
+  assert.match(src, /打开工作目录/);
+  assert.match(src, /打开记忆目录/);
+  assert.match(src, /\/dsh-dev-memory\/open/);
   assert.doesNotMatch(src, /postConfig\(\{[^}]*workspace/);
 });
 
 test('memory tool cards parse search, write, and health blocks', async () => {
   const api = await loadClientExports();
-  const search = api.memoryToolCardModel('memory_search', { argsRaw: JSON.stringify({ query: 'Fish20', top: 2 }) });
+  const search = api.memoryToolCardModel('memory_search', {
+    kind: 'result',
+    call: { argsRaw: JSON.stringify({ query: 'Fish20', top: 2 }) },
+    output: JSON.stringify({ query: 'Fish20', results: [{ file: 'a.md' }, { file: 'b.md' }], workspace: { name: 'Fish20', memoryRoot: 'C:\\mem' } }),
+  });
   assert.equal(search.title, '查询项目记忆');
-  assert.equal(search.state, 'running');
+  assert.equal(search.state, 'ok');
+  assert.equal(search.count, 2);
+  assert.equal(JSON.stringify(search.files), JSON.stringify(['a.md', 'b.md']));
+  assert.equal(search.memoryRoot, 'C:\\mem');
   const write = api.memoryToolCardModel('memory_write', {
     kind: 'result',
-    call: { argsRaw: JSON.stringify({ proposal: { draft: { relPath: 'fishing/core.md' } } }) },
-    output: JSON.stringify({ written: true, audit: { action: 'update', relPath: 'fishing/core.md', summary: '补充回收时序', ts: 1 }, workspace: { id: 'D--fish', name: 'Fish20', memoryRoot: 'C:\\mem' } }),
+    call: { argsRaw: JSON.stringify({ proposal: { module: 'fishing/core', category: 'fact', confidence: 'high', evidence: ['src'], draft: { relPath: 'fishing/core.md' } } }) },
+    output: JSON.stringify({ written: true, audit: { action: 'update', relPath: 'fishing/core.md', summary: '补充回收时序', module: 'fishing/core', category: 'fact', confidence: 'high', evidenceSource: 'src', ts: 1 }, workspace: { id: 'D--fish', name: 'Fish20', memoryRoot: 'C:\\mem' } }),
   });
   assert.equal(write.title, '更新项目记忆');
   assert.equal(write.file, 'fishing/core.md');
   assert.equal(write.workspaceName, 'Fish20');
+  assert.equal(write.module, 'fishing/core');
+  assert.equal(write.category, 'fact');
+  assert.equal(write.confidence, 'high');
+  assert.equal(write.evidence, 'src');
+  assert.equal(write.ts, 1);
   const health = api.memoryToolCardModel('memory_health', {
     kind: 'result',
-    output: JSON.stringify({ summary: { markdownFiles: 17, severityCounts: { high: 2, medium: 2, low: 11 } }, workspace: { name: 'Fish20' } }),
+    output: JSON.stringify({ summary: { directories: 4, markdownFiles: 17, memoryIndexExists: true, severityCounts: { high: 2, medium: 2, low: 11 } }, issues: { brokenLinks: [1, 2] }, workspace: { name: 'Fish20' } }),
   });
   assert.match(health.summary, /17/);
+  assert.equal(health.directories, 4);
+  assert.equal(health.index, true);
+  assert.equal(health.issueCount, 2);
 });
 
 test('registers memory toolviews and a turn-tail selector for successful writes', () => {

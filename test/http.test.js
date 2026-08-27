@@ -214,3 +214,23 @@ test('POST /dsh-dev-memory/workspaces mutates only from a trusted origin', async
   assert.equal(JSON.parse(ok.body).ok, true);
   assert.equal(command.action, 'pin');
 });
+
+test('POST /dsh-dev-memory/open reveals a trusted local path', async () => {
+  const webServer = makeWebServer();
+  let opened;
+  mountDevMemoryRoutes(webServer, {
+    getSnapshot() { return {}; },
+    updateConfig() { return {}; },
+    openPath(body) { opened = body.path; return { ok: true, path: body.path }; },
+  });
+  const route = Object.fromEntries(webServer.routes.map((r) => [r.path, r]))['/dsh-dev-memory/open'];
+  assert.ok(route);
+  const denied = mockRes();
+  await route.handler(jsonReq('POST', { path: 'C:\\repo' }, { origin: 'http://evil.example', host: '127.0.0.1:12393' }), denied);
+  assert.equal(denied.status, 403);
+  const ok = mockRes();
+  await route.handler(jsonReq('POST', { path: 'C:\\repo' }, trustedHeaders()), ok);
+  assert.equal(ok.status, 200);
+  assert.equal(JSON.parse(ok.body).ok, true);
+  assert.equal(opened, 'C:\\repo');
+});
