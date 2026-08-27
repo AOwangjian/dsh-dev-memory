@@ -55,18 +55,19 @@ test('registers a settings.section panel named dev-memory', () => {
   const { ctx, registrations } = makeCtx();
   assert.doesNotThrow(() => plugin.apply(ctx));
 
-  assert.equal(registrations.length, 1);
-  assert.equal(registrations[0].options.name, 'settings.section');
-  assert.equal(registrations[0].options.id, 'dev-memory');
-  assert.equal(registrations[0].options.label, 'dev-memory');
-  assert.equal(typeof registrations[0].component, 'function');
+  const section = registrations.find((row) => row.options.name === 'settings.section');
+  assert.ok(section);
+  assert.equal(section.options.id, 'dev-memory');
+  assert.equal(section.options.label, 'dev-memory');
+  assert.equal(typeof section.component, 'function');
 });
 
 test('component renders through React.createElement (no JSX)', () => {
   const plugin = materialize();
   const { ctx, registrations } = makeCtx();
   plugin.apply(ctx);
-  const tree = registrations[0].component();
+  const section = registrations.find((row) => row.options.name === 'settings.section');
+  const tree = section.component();
   assert.equal(tree.type, 'div');
   assert.equal(tree.props['data-dev-memory'], 'review-panel');
 });
@@ -93,8 +94,9 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   const { fileURLToPath } = await import('node:url');
   const { dirname, join } = await import('node:path');
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
-  assert.match(src, /fetch\(['"]\/dsh-dev-memory\/state['"]/);
+  assert.match(src, /\/dsh-dev-memory\/state/);
   assert.match(src, /fetch\(['"]\/dsh-dev-memory\/config['"]/);
+  assert.match(src, /browseStateUrl/);
   assert.match(src, /useState/);
   assert.match(src, /useEffect/);
   assert.match(src, /8000/);
@@ -160,4 +162,114 @@ test('panel source includes card layout, status switch, button interaction, and 
   assert.match(src, /保存中/);
   assert.match(src, /已保存/);
   assert.match(src, /change-time/);
+});
+
+function loadClientExports() {
+  return import('node:fs').then(async ({ readFileSync }) => {
+    const { runInNewContext } = await import('node:vm');
+    const { fileURLToPath } = await import('node:url');
+    const { dirname, join } = await import('node:path');
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+    const sandbox = { module: { exports: {} }, exports: {} };
+    runInNewContext(src, sandbox);
+    return sandbox.module.exports;
+  });
+}
+
+test('workspace helpers filter, label, and keep browse URLs read-only', async () => {
+  const api = await loadClientExports();
+  const rows = [
+    { id: 'D--fish', name: 'Fish20', verified: true, pinned: true, workspacePath: 'D:\\fish' },
+    { id: 'D--other', name: 'Other', verified: false, pinned: false, workspacePath: null },
+  ];
+  assert.deepEqual(api.filterWorkspaces(rows, 'fish').map((x) => x.id), ['D--fish']);
+  assert.equal(api.workspaceStatusLabel(rows[0], 'D--fish'), '当前会话');
+  assert.equal(api.workspaceStatusLabel(rows[1], 'D--fish'), '仅发现记忆库');
+  assert.equal(api.browseStateUrl('D--other'), '/dsh-dev-memory/state?workspace=D--other');
+  assert.equal(api.browseStateUrl(''), '/dsh-dev-memory/state');
+});
+
+test('panel source loads workspaces and never posts browse selection to /config', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+  assert.match(src, /\/dsh-dev-memory\/workspaces/);
+  assert.match(src, /当前会话写入/);
+  assert.match(src, /当前面板浏览/);
+  assert.match(src, /browseWorkspaceId/);
+  assert.match(src, /state\?workspace=/);
+  assert.match(src, /action:'pin'/);
+  assert.match(src, /action:'rename'/);
+  assert.match(src, /action:'remove'/);
+  assert.doesNotMatch(src, /postConfig\(\{[^}]*workspace/);
+});
+
+test('memory tool cards parse search, write, and health blocks', async () => {
+  const api = await loadClientExports();
+  const search = api.memoryToolCardModel('memory_search', { argsRaw: JSON.stringify({ query: 'Fish20', top: 2 }) });
+  assert.equal(search.title, '查询项目记忆');
+  assert.equal(search.state, 'running');
+  const write = api.memoryToolCardModel('memory_write', {
+    kind: 'result',
+    call: { argsRaw: JSON.stringify({ proposal: { draft: { relPath: 'fishing/core.md' } } }) },
+    output: JSON.stringify({ written: true, audit: { action: 'update', relPath: 'fishing/core.md', summary: '补充回收时序', ts: 1 }, workspace: { id: 'D--fish', name: 'Fish20', memoryRoot: 'C:\\mem' } }),
+  });
+  assert.equal(write.title, '更新项目记忆');
+  assert.equal(write.file, 'fishing/core.md');
+  assert.equal(write.workspaceName, 'Fish20');
+  const health = api.memoryToolCardModel('memory_health', {
+    kind: 'result',
+    output: JSON.stringify({ summary: { markdownFiles: 17, severityCounts: { high: 2, medium: 2, low: 11 } }, workspace: { name: 'Fish20' } }),
+  });
+  assert.match(health.summary, /17/);
+});
+
+test('registers memory toolviews and a turn-tail selector for successful writes', () => {
+  const plugin = materialize();
+  const registrations = [];
+  const events = [];
+  const ctx = {
+    slots: {
+      inject(_key, callback) {
+        const value = callback();
+        if (typeof value === 'function') return value;
+        return () => {};
+      },
+      register(options, component) {
+        registrations.push({ options, component });
+        return () => {};
+      },
+    },
+    conversationEvents: { register(def) { events.push(def); } },
+    get(name) {
+      if (name === 'slots') return this.slots;
+      if (name === 'conversationEvents') return this.conversationEvents;
+      return undefined;
+    },
+  };
+  plugin.apply(ctx);
+  const keys = registrations.map((row) => row.options.key).filter(Boolean);
+  assert.deepEqual(keys.filter((k) => String(k).startsWith('memory_')).sort(), ['memory_health', 'memory_search', 'memory_write']);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, 'dev-memory-writes');
+  const tail = registrations.find((row) => row.options.name === 'conversation.chat.turnTail');
+  assert.ok(tail);
+  assert.equal(typeof tail.options.select, 'function');
+  assert.equal(tail.options.select({ turn: { data: { get: () => ({ writes: [] }) } }, seq: 9 }), null);
+});
+
+test('turn accumulator keeps successful create/update writes and ignores search or errors', async () => {
+  const api = await loadClientExports();
+  const def = api.memoryWriteEventDefinition;
+  let state = def.start({}, { event: { type: 'turn/start', data: { turn: 3 } } });
+  state = def.update({ state }, { event: { type: 'tool/call', data: { turn: 3, callId: '1', name: 'memory_write', argsRaw: JSON.stringify({ proposal: { draft: { relPath: 'a.md' } } }) } } });
+  state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 3, message: { source: { callId: '1' }, content: [{ isError: false, text: JSON.stringify({ written: true, audit: { action: 'create', relPath: 'a.md', summary: 'new' } }) }] } }, seq: 4 } });
+  state = def.update({ state }, { event: { type: 'tool/call', data: { turn: 3, callId: '2', name: 'memory_search', argsRaw: '{}' } } });
+  state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 3, message: { source: { callId: '2' }, content: [{ isError: false, text: '{}' }] } }, seq: 5 } });
+  state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 3, message: { source: { callId: '1' }, content: [{ isError: true, text: 'nope' }] } }, seq: 6 } });
+  const selected = api.selectMemoryWrites({ turn: { data: { get: () => state } }, seq: 9 });
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].action, 'create');
+  assert.equal(selected[0].relPath, 'a.md');
 });

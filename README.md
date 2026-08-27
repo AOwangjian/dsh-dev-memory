@@ -51,6 +51,10 @@ dsh plugin --profile <name> add <local-path>
 canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默认，
 与 Claude Code 共享、零迁移）。记忆根建议 `git init` 以支持回滚。
 
+所有 DSH profile 共用一份工作区注册表：`~/.dsh/dev-memory/workspaces.json`。
+会话开始时按当前 `cwd` 自动登记；设置页可以浏览任意已登记工作区的健康状态和 changelog。
+**浏览目标不会改变当前会话的写入目标。**
+
 ## 三个工具
 
 ### `memory_search` — 按需查询记忆
@@ -127,29 +131,30 @@ canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默�
 
 ```
 lib/
-├── index.js        # HOST 插件：memory service + 3 工具 + 生命周期钩子 + 写盘编排
-├── client.js       # CLIENT：审查面板（静态骨架）
+├── index.js        # HOST 插件：memory service + 3 工具 + 生命周期钩子 + HTTP + 工作区登记
+├── client.js       # CLIENT：设置面板、工作区选择器、对话工具卡、回合摘要
+├── workspaces.js   # 全局共享工作区注册表（锁 + 原子替换）
 ├── contract.js     # DSH 接口契约（事件/服务/方法/工具/slot/脚本 CLI，均有源码出处）
 ├── service.js      # 桥接 dev-memory CLI 脚本（search / write / health）
 ├── orchestrator.js # 写盘编排：分类门 → Level-1 闸 → 落盘 + 审计
 ├── classify.js     # 写前分类门（fact / pitfall / open_question）
+├── http.js         # same-origin 状态 / 配置 / 工作区路由
 └── audit.js        # append-only 审计日志
 ```
 
+对话里的 `memory_search` / `memory_write` / `memory_health` 会显示可折叠工具卡；
+本轮若有成功写入，回答末尾会追加「记忆变更」摘要。
+
 ## 已知限制（如实说明）
 
-- **客户端面板是静态骨架**：`lib/client.js` 是静态 `dsh.client` bundle，静态插件没有
-  `host.call` 的 Client→Host RPC 通道，因此实时数据绑定（最近写入 / health）与
-  Level-1 门禁 UI 尚未接通，面板目前只渲染占位内容。
-- **`autoWriteLevels` / `writeConfidenceMin` 已声明但尚未接线**：
-  `writeConfidenceMin` 在 `classify.js` 中硬编码为 `'medium'`；Level-1 人工确认在
-  `orchestrator.js` 中硬编码（`moduleLevel === 1`）；`autoWriteLevels` 尚未被读取。
-  配置接线是已记录的 TODO。
+- 工作区选择器只改变面板浏览目标，不会把当前会话绑定到另一个项目。
+- 仅扫描发现的记忆库在打开对应项目前可能没有真实 `workspacePath`。
+- 删除工作区登记不会删除记忆文件。
 
 ## 开发
 
 ```bash
-# 单元测试（30 个用例）
+# 单元测试
 node --test
 
 # 端到端冒烟（加载健全性 / profile 合成 / 真实脚本功能）
@@ -226,6 +231,10 @@ the profile layer:
 The canonical memory root is `~/.claude/projects/<slug>/memory` (the dev-memory
 official default, shared with Claude Code with zero migration). `git init` the
 memory root for rollback.
+
+All DSH profiles share `~/.dsh/dev-memory/workspaces.json`. Live session cwd is
+registered automatically. The settings panel can browse another workspace's health
+and changelog; **browsing never changes the current conversation write target.**
 
 ## The three tools
 
@@ -310,30 +319,32 @@ A `memory_write` proposal must pass `classify.js`:
 
 ```
 lib/
-├── index.js        # HOST plugin: memory service + 3 tools + lifecycle hooks + write-pass orchestration
-├── client.js       # CLIENT: review panel (static skeleton)
+├── index.js        # HOST plugin: memory service + 3 tools + lifecycle hooks + HTTP + workspace registry
+├── client.js       # CLIENT: settings panel, workspace selector, conversation cards, turn tail
+├── workspaces.js   # globally shared workspace registry (lock + atomic replace)
 ├── contract.js     # DSH interface contract (events/services/methods/tools/slots/script CLI, all source-traced)
 ├── service.js      # bridges the dev-memory CLI scripts (search / write / health)
 ├── orchestrator.js # write-pass orchestration: classification gate → Level-1 gate → write + audit
 ├── classify.js     # pre-write classification gate (fact / pitfall / open_question)
+├── http.js         # same-origin state / config / workspace routes
 └── audit.js        # append-only audit log
 ```
 
+Conversation `memory_search` / `memory_write` / `memory_health` calls render
+collapsible cards. Successful writes also appear as a compact turn-tail summary.
+
 ## Known limitations (stated honestly)
 
-- **The client panel is a static skeleton**: `lib/client.js` is a static
-  `dsh.client` bundle, and a static plugin has no `host.call` Client→Host RPC
-  channel, so the live data binding (recent writes / health) and the Level-1 gate UI
-  are not yet wired — the panel currently renders placeholder content only.
-- **`autoWriteLevels` / `writeConfidenceMin` are declared but not yet threaded**:
-  `writeConfidenceMin` is hard-coded to `'medium'` in `classify.js`; the Level-1
-  manual confirmation is hard-coded in `orchestrator.js` (`moduleLevel === 1`);
-  `autoWriteLevels` is not yet read. Wiring the config is a recorded TODO.
+- The workspace selector changes the panel browse target only; it does not rebind
+  the current conversation write root.
+- Discovered-only memory libraries may lack a real `workspacePath` until the
+  matching project is opened.
+- Removing a registry entry never deletes memory files.
 
 ## Development
 
 ```bash
-# unit tests (30 cases)
+# unit tests
 node --test
 
 # end-to-end smoke (load sanity / profile composition / real script functionality)
