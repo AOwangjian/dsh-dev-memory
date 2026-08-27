@@ -115,3 +115,44 @@ test('memory_write rejects missing or bogus confidence', async () => {
   await assert.rejects(write.execute({ proposal: { ...base, confidence: '' } }), /memory_write\.proposal\.confidence/);
   await assert.rejects(write.execute({ proposal: { ...base, confidence: 'extreme' } }), /memory_write\.proposal\.confidence/);
 });
+
+test('session-start inject and goal-complete reminder skip when enabled is false', () => {
+  const { ctx, handlers, sections } = makeCtx();
+  plugin.apply(ctx, { enabled: false });
+  assert.equal(sections.length, 0, 'write-pass systemPrompt section skipped when disabled');
+
+  const injected = [];
+  const agent = { id: 's1', inject: (m) => injected.push(m), session: { id: 's1', header: { cwd: 'C:\\ws' } } };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
+  assert.equal(injected.length, 0, 'session-start inject skipped when disabled');
+
+  for (const h of handlers.get(contract.EVENTS.GOAL_CHANGED)) h({ agent, change: { operation: 'complete' } });
+  assert.equal(injected.length, 0, 'goal-complete reminder skipped when disabled');
+});
+
+test('apply still registers tools when enabled is false', () => {
+  const { ctx, registered } = makeCtx();
+  plugin.apply(ctx, { enabled: false });
+  assert.deepEqual(registered.map((d) => d.name).sort(), ['memory_health', 'memory_search', 'memory_write']);
+});
+
+test('ctx.inject(["webServer"]) mounts state and config routes', () => {
+  const { ctx } = makeCtx();
+  const routes = [];
+  let injected;
+  ctx.inject = (deps, fn) => {
+    injected = deps;
+    fn({
+      effect: (cb) => cb(),
+      webServer: {
+        register(def) {
+          routes.push(def);
+          return () => {};
+        },
+      },
+    });
+  };
+  plugin.apply(ctx);
+  assert.deepEqual(injected, ['webServer']);
+  assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/state']);
+});

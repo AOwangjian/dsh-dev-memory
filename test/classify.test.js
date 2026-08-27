@@ -26,3 +26,13 @@ test('拒绝缺模块', () => {
 test('CATEGORIES 恰为四类', () => {
   assert.deepEqual(CATEGORIES, ['fact', 'pitfall', 'open_question', 'changelog']);
 });
+
+test('writeConfidenceMin=high 拒绝 medium', () => {
+  const r = validateProposal({ category: 'fact', confidence: 'medium', evidence: ['a'], module: 'm', draft: '' }, { writeConfidenceMin: 'high' });
+  assert.equal(r.accept, false);
+});
+test('writeConfidenceMin=low 接受 low', () => {
+  const r = validateProposal({ category: 'fact', confidence: 'low', evidence: ['a'], module: 'm', draft: '' }, { writeConfidenceMin: 'low' });
+  assert.equal(r.accept, true);
+});
+

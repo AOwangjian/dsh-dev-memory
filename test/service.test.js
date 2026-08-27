@@ -101,3 +101,30 @@ test('runScript: 非零退出抛错', () => {
 test('runScript: spawn 失败报告 r.error 而非 (null)', () => {
   assert.throws(() => runScript('definitely-not-a-real-node-exe', 'x.mjs', []), /script spawn failed/);
 });
+
+test('memoryRoot getter is resolved on each search/write/health call', () => {
+  const d1 = mkdtempSync(join(tmpdir(), 'mem-root-a-'));
+  const d2 = mkdtempSync(join(tmpdir(), 'mem-root-b-'));
+  try {
+    let root = d1;
+    const calls = [];
+    const run = (node, script, args) => {
+      calls.push({ script, args: args.slice() });
+      return JSON.stringify({ ok: true });
+    };
+    const svc = makeMemoryService({ memoryRoot: () => root, scriptsDir: 'S', node: 'node', run });
+    svc.search('q', 1);
+    assert.equal(calls[0].args[0], d1);
+    root = d2;
+    svc.search('q', 1);
+    assert.equal(calls[1].args[0], d2);
+    svc.health();
+    assert.equal(calls[2].args[0], d2);
+    svc.write({ relPath: 'n.md', content: '# n\n' });
+    assert.equal(calls[3].args[1], d2);
+    assert.equal(readFileSync(join(d2, 'n.md'), 'utf8'), '# n\n');
+  } finally {
+    rmSync(d1, { recursive: true, force: true });
+    rmSync(d2, { recursive: true, force: true });
+  }
+});

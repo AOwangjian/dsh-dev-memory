@@ -12,6 +12,8 @@ globalThis.window = {
 
 const fakeReact = {
   createElement(type, props, ...children) { return { type, props, children }; },
+  useState(initial) { return [typeof initial === 'function' ? initial() : initial, () => {}]; },
+  useEffect() {},
 };
 
 await import('../lib/client.js');
@@ -84,5 +86,19 @@ test('imports cleanly without a browser global (importability)', async () => {
   } finally {
     globalThis.window = had;
   }
+});
+
+test('panel source fetches /dsh-dev-memory/state and posts /config', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+  assert.match(src, /fetch\(['"]\/dsh-dev-memory\/state['"]/);
+  assert.match(src, /fetch\(['"]\/dsh-dev-memory\/config['"]/);
+  assert.match(src, /useState/);
+  assert.match(src, /useEffect/);
+  assert.match(src, /8000/);
+  assert.doesNotMatch(src, /^\s*import\s/m);
+  assert.doesNotMatch(src, /^\s*export\s/m);
 });
 

@@ -8,3 +8,4 @@
         maxInjectTokens: 1500
         autoWriteLevels: [2, 3]
         writeConfidenceMin: 'medium'
+        enabled: true
