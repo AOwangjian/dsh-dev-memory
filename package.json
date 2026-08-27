@@ -1,11 +1,11 @@
 {
   "name": "dsh-dev-memory",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Ambient project-memory for DeepSeek Harness: auto query/update/create module memory via a Cordis plugin.",
   "keywords": ["dsh", "deepseek-harness", "memory", "cordis", "plugin"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/AOwangjian/dsh-dev-memory"
+    "url": "git+https://github.com/AOwangjian/dsh-dev-memory.git"
   },
   "type": "module",
   "main": "lib/index.js",

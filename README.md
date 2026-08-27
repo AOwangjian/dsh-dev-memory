@@ -1,23 +1,24 @@
 # dsh-dev-memory
 
-> **English summary** — `dsh-dev-memory` is a Cordis plugin for
-> [DeepSeek Harness](https://github.com/deepseek-ai/dsh) (DSH) that turns the
-> external *dev-memory* skill into an always-on, auto-integrated project memory.
-> It auto-**queries** memory when a session starts, auto-**updates** memory at
-> goal/session-end boundaries, and auto-**creates** new module memory (with a
-> human gate at Level 1). It wraps the dev-memory CLI scripts — it never
-> reimplements them.
+[![npm version](https://img.shields.io/npm/v/dsh-dev-memory)](https://www.npmjs.com/package/dsh-dev-memory)
+[![license](https://img.shields.io/npm/l/dsh-dev-memory)](./LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D18-green)](https://nodejs.org/)
 
-## 它是什么
+![demo](https://raw.githubusercontent.com/AOwangjian/dsh-dev-memory/main/docs/demo.gif)
 
-把 dev-memory 技能从「主动调用型 skill」升级为 DSH 原生环境能力：
+> English readers: a complete English section follows the Chinese one — see
+> [English](#english).
 
-- **该查询时查询** — 会话开始时自动检索并注入相关记忆（token 有界）；agent 需要时也可主动调用 `memory_search`。
-- **该更新时更新** — goal 完成 / 会话结束时，通过写盘指令让 agent 调用 `memory_write` 沉淀增量。
-- **该创建时创建** — 新模块按级别自动创建（Level 2-3 全自动，Level 1 保留人工确认）。
+`dsh-dev-memory` 是一个面向 [DeepSeek Harness](https://github.com/deepseek-ai/dsh)（DSH）
+的 **Cordis 插件**，它把外部的 *dev-memory* 技能升级成「常开、自动集成」的项目记忆。它只在
+**该查时查 / 该更新时更新 / 该创建时创建**：
 
-插件只是薄薄一层编排：dev-memory 的脚本（`search-memory.mjs` /
-`memory-crud.mjs` / `health-check.mjs`）与规则仍是唯一真源，skill 一更新插件自动跟随，无双份漂移。
+- **该查时查** —— 会话开始时自动检索并注入相关记忆（token 有界）；agent 需要时也可主动调用 `memory_search`。
+- **该更新时更新** —— goal 完成 / 会话结束时，通过写盘指令让 agent 调用 `memory_write` 沉淀增量。
+- **该创建时创建** —— 新模块按级别自动创建（Level 2-3 全自动，Level 1 保留一道人工确认）。
+
+插件只是薄薄一层编排：dev-memory 的脚本（`search-memory.mjs` / `memory-crud.mjs` /
+`health-check.mjs`）与规则仍是唯一真源，skill 一更新插件自动跟随，无双份漂移。
 
 ## 安装
 
@@ -41,7 +42,7 @@ dsh plugin --profile <name> add <local-path>
 
 | 键 | 默认 | 含义 |
 |---|---|---|
-| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | 记忆根目录；slug = workspace 路径把 `:` 与 `\` 替换成 `-` |
+| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | 记忆根目录；slug = workspace 路径把冒号与目录分隔符替换成 `-` |
 | `scriptsDir` | `''` → `~/.dsh/skills/dev-memory/scripts` | dev-memory 脚本目录 |
 | `maxInjectTokens` | `1500` | 会话开始注入记忆的 token 预算 |
 | `autoWriteLevels` | `[2, 3]` | 允许自动写入的模块级别（Level 1 保留人工确认） |
@@ -50,21 +51,61 @@ dsh plugin --profile <name> add <local-path>
 canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默认，
 与 Claude Code 共享、零迁移）。记忆根建议 `git init` 以支持回滚。
 
+## 三个工具
+
+### `memory_search` — 按需查询记忆
+
+参数：`query`（必填，查询词）、`top`（可选，最大返回条数，默认 5）。
+返回 JSON：`{ query, terms, results: [{ file, score, confidence, matched, suggestedRead }] }`。
+
+```json
+{
+  "query": "结算 金币",
+  "top": 3
+}
+```
+
+### `memory_write` — 从结构化 proposal 写入记忆
+
+仅在 goal 完成 / 会话结束边界调用。参数 `proposal` 必填，包含
+`module` / `category`（`fact` | `pitfall` | `open_question`）/
+`confidence`（`low` | `medium` | `high`）/ `evidence`（非空数组）/
+`draft`（`relPath` + `content`），可选 `moduleLevel`（整数，1 需人工确认）。
+
+```json
+{
+  "proposal": {
+    "module": "fishing/settlement",
+    "category": "fact",
+    "confidence": "high",
+    "evidence": ["src/settlement.lua"],
+    "draft": {
+      "relPath": "modules/fishing/settlement.md",
+      "content": "# 结算"
+    }
+  }
+}
+```
+
+### `memory_health` — 体检
+
+无参数。返回 `{ summary, issues }`（索引一致性 / 孤儿 / 断链等）。
+
+```json
+{}
+```
+
+完整的调用与返回示例见 [examples/tool-calls.md](examples/tool-calls.md)。
+
 ## 工作原理
-
-### 三个工具
-
-- `memory_search` — 按需查询记忆（事实 / 踩坑 / 开放问题 / changelog）。
-- `memory_write` — 从结构化 proposal 写入记忆（仅在 goal 完成 / 会话结束边界调用）。
-- `memory_health` — 体检（索引一致性 / 孤儿 / 断链）。
 
 ### 注入 & 写盘
 
 - **会话开始**：`agent/session-start` 事件 → 按当前 workspace 检索 top-2 命中 →
-  按 `maxInjectTokens` 截断（整条命中保留、不切坏 JSON）→ 通过 `agent.inject()`
-  注入上下文；无命中则跳过注入。
+  按 `maxInjectTokens` 截断（整条命中保留、不切坏 JSON，约 4 字符/token）→ 通过
+  `agent.inject()` 注入上下文；无命中则跳过注入。
 - **goal 完成 / 会话结束**：注册系统提示段 `dev-memory:write-pass`（order 116）
-  + `goal/changed`(complete) 的边界提醒。钩子只发指令、不直接落盘——真正落盘发生在
+  + `goal/changed`(`complete`) 的边界提醒。钩子只发指令、不直接落盘——真正落盘发生在
   agent 调用 `memory_write` 时，由编排器把关。
 
 ### 分类门（写前把关）
@@ -118,6 +159,196 @@ node scripts/e2e-smoke.mjs
 dsh plugin --profile <name> add <repo-root>
 # 若要 headless 启动，再把 @deepseek-ai/dsh-headless 加入 dsh.profile.bundles
 ```
+
+## 示例
+
+- [examples/README.md](examples/README.md) — 示例索引与用法说明。
+- [examples/memory-tree.md](examples/memory-tree.md) — 插件产出的记忆目录树样例。
+- [examples/tool-calls.md](examples/tool-calls.md) — 三个工具的真实调用与 JSON 返回。
+
+## License
+
+MIT
+
+---
+
+# English
+
+`dsh-dev-memory` is a **Cordis plugin** for [DeepSeek Harness](https://github.com/deepseek-ai/dsh)
+(DSH) that turns the external *dev-memory* skill into an always-on, auto-integrated
+project memory. It auto-**queries** memory when a session starts, auto-**updates**
+memory at goal/session-end boundaries, and auto-**creates** new module memory
+(with a human gate at Level 1). It wraps the dev-memory CLI scripts — it never
+reimplements them.
+
+- **Query when needed** — at session start it auto-searches and injects relevant
+  memory (token-bounded); agents can also call `memory_search` on demand.
+- **Update when needed** — at goal-completion / session-end boundaries it
+  instructs the agent to call `memory_write` and persist the increment.
+- **Create when needed** — new modules are created by level (Level 2-3 fully
+  automatic, Level 1 keeps one human confirmation).
+
+The plugin is only a thin orchestration layer: the dev-memory scripts
+(`search-memory.mjs` / `memory-crud.mjs` / `health-check.mjs`) and rules remain
+the single source of truth, so the plugin follows skill updates automatically with
+no double drift.
+
+## Install
+
+`dsh plugin` forwards its remaining arguments to pnpm in the profile directory,
+so it is equivalent to running `pnpm add` there (see the `dsh --help` example:
+`dsh plugin --profile tui add <package>`):
+
+```bash
+# install from npm
+dsh plugin --profile <name> add dsh-dev-memory
+
+# development / local install
+dsh plugin --profile <name> add <local-path>
+```
+
+> The `dsh --help` / `dsh plugin` help text does not document a `github:`
+> prefixed install form, so only the two verified forms above are listed.
+
+## Configure
+
+Configuration lives in the `config` block of `cordis.patch.yml` and is mounted at
+the profile layer:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | Memory root; slug = workspace path with the colon and directory separator replaced by `-` |
+| `scriptsDir` | `''` → `~/.dsh/skills/dev-memory/scripts` | dev-memory scripts directory |
+| `maxInjectTokens` | `1500` | Token budget for the memory injected at session start |
+| `autoWriteLevels` | `[2, 3]` | Module levels allowed to auto-write (Level 1 keeps manual confirmation) |
+| `writeConfidenceMin` | `'medium'` | Minimum confidence for auto-write (below `medium` never auto-writes) |
+
+The canonical memory root is `~/.claude/projects/<slug>/memory` (the dev-memory
+official default, shared with Claude Code with zero migration). `git init` the
+memory root for rollback.
+
+## The three tools
+
+### `memory_search` — query memory on demand
+
+Args: `query` (required), `top` (optional, max results, default 5).
+Returns JSON: `{ query, terms, results: [{ file, score, confidence, matched, suggestedRead }] }`.
+
+```json
+{
+  "query": "settlement coins",
+  "top": 3
+}
+```
+
+### `memory_write` — write memory from a structured proposal
+
+Call only at a goal-completion or session-end boundary. The `proposal` argument is
+required and contains `module` / `category` (`fact` | `pitfall` | `open_question`) /
+`confidence` (`low` | `medium` | `high`) / `evidence` (non-empty array) /
+`draft` (`relPath` + `content`), plus optional `moduleLevel` (integer; `1`
+requires manual confirmation).
+
+```json
+{
+  "proposal": {
+    "module": "fishing/settlement",
+    "category": "fact",
+    "confidence": "high",
+    "evidence": ["src/settlement.lua"],
+    "draft": {
+      "relPath": "modules/fishing/settlement.md",
+      "content": "# Settlement"
+    }
+  }
+}
+```
+
+### `memory_health` — health check
+
+No args. Returns `{ summary, issues }` (index consistency, orphans, broken links).
+
+```json
+{}
+```
+
+See [examples/tool-calls.md](examples/tool-calls.md) for complete invocations and
+JSON results.
+
+## How it works
+
+### Injection & write pass
+
+- **Session start**: the `agent/session-start` event → search top-2 hits for the
+  current workspace → truncate to `maxInjectTokens` (whole hits kept, never slices
+  JSON mid-string, ~4 chars/token) → inject context via `agent.inject()`; skip
+  injection when there are no hits.
+- **Goal completion / session end**: register the `dev-memory:write-pass`
+  system-prompt section (order 116) + a boundary reminder on
+  `goal/changed`(`complete`). Hooks only instruct; they never write directly —
+  the actual write happens when the agent calls `memory_write` and is gated by the
+  orchestrator.
+
+### Classification gate (pre-write guard)
+
+A `memory_write` proposal must pass `classify.js`:
+
+- Allowed categories: `fact` / `pitfall` / `open_question`.
+- `changelog` is never written; confidence below `medium` never auto-writes.
+- An empty `evidence` list is rejected.
+
+### Creation flow & reversibility
+
+- New modules: Level 2-3 are created fully automatically; Level 1 (a new primary
+  domain) returns `needsConfirm` and requires manual confirmation.
+- Every write appends an append-only audit entry
+  (`<memoryRoot>/.audit/audit.jsonl`, recording when / session / module / category /
+  confidence / evidence source / action).
+- Git-tracked memory root + audit give rollback / review / retirement.
+
+## Architecture
+
+```
+lib/
+├── index.js        # HOST plugin: memory service + 3 tools + lifecycle hooks + write-pass orchestration
+├── client.js       # CLIENT: review panel (static skeleton)
+├── contract.js     # DSH interface contract (events/services/methods/tools/slots/script CLI, all source-traced)
+├── service.js      # bridges the dev-memory CLI scripts (search / write / health)
+├── orchestrator.js # write-pass orchestration: classification gate → Level-1 gate → write + audit
+├── classify.js     # pre-write classification gate (fact / pitfall / open_question)
+└── audit.js        # append-only audit log
+```
+
+## Known limitations (stated honestly)
+
+- **The client panel is a static skeleton**: `lib/client.js` is a static
+  `dsh.client` bundle, and a static plugin has no `host.call` Client→Host RPC
+  channel, so the live data binding (recent writes / health) and the Level-1 gate UI
+  are not yet wired — the panel currently renders placeholder content only.
+- **`autoWriteLevels` / `writeConfidenceMin` are declared but not yet threaded**:
+  `writeConfidenceMin` is hard-coded to `'medium'` in `classify.js`; the Level-1
+  manual confirmation is hard-coded in `orchestrator.js` (`moduleLevel === 1`);
+  `autoWriteLevels` is not yet read. Wiring the config is a recorded TODO.
+
+## Development
+
+```bash
+# unit tests (30 cases)
+node --test
+
+# end-to-end smoke (load sanity / profile composition / real script functionality)
+node scripts/e2e-smoke.mjs
+
+# local load
+dsh plugin --profile <name> add <repo-root>
+# for a headless boot, also add @deepseek-ai/dsh-headless to dsh.profile.bundles
+```
+
+## Examples
+
+- [examples/README.md](examples/README.md) — example index and usage.
+- [examples/memory-tree.md](examples/memory-tree.md) — a sample memory tree the plugin creates.
+- [examples/tool-calls.md](examples/tool-calls.md) — real invocations and JSON results for the three tools.
 
 ## License
 
