@@ -48,6 +48,24 @@ test('upsertVerified derives the exact strict slug and preserves first seen meta
   assert.equal(second.verified, true);
 });
 
+test('scan never downgrades an existing verified workspace binding', (t) => {
+  const { registry } = fixture(t, [1200, 1300, 1400, 1500]);
+  const verified = registry.upsertVerified(String.raw`D:\bydk\F20_Client\Fish20`);
+  registry.mutate({ action: 'rename', id: verified.id, name: 'Custom Fish' });
+  registry.mutate({ action: 'pin', id: verified.id, pinned: true });
+  mkdirSync(verified.memoryRoot, { recursive: true });
+
+  const scanned = registry.scan().find(x => x.id === verified.id);
+
+  assert.equal(scanned.verified, true);
+  assert.equal(scanned.workspacePath, String.raw`D:\bydk\F20_Client\Fish20`);
+  assert.equal(scanned.name, 'Custom Fish');
+  assert.equal(scanned.pinned, true);
+  assert.equal(scanned.firstSeenAt, 1200);
+  assert.equal(scanned.lastSeenAt, 1200);
+  assert.deepEqual(scanned.sourceProfiles, ['web']);
+});
+
 test('list sorts pinned first, then lastWriteAt, then lastSeenAt', (t) => {
   const { registry } = fixture(t, [1, 2, 3, 4, 5, 6]);
   const a = registry.upsertVerified(String.raw`C:\a`);
@@ -89,4 +107,22 @@ test('each mutation re-reads and merges changes written by another registry inst
   a.upsertVerified(String.raw`C:\alpha`);
   b.upsertVerified(String.raw`C:\beta`);
   assert.deepEqual(a.list().map(x => x.id).sort(), ['C--alpha', 'C--beta']);
+});
+
+test('missing registry restores a valid previous file after interrupted replacement', (t) => {
+  const { registry, registryPath, projectsRoot } = fixture(t, [900]);
+  mkdirSync(dirname(registryPath), { recursive: true });
+  const previous = {
+    version: 1,
+    workspaces: [{
+      id: 'C--saved', name: 'Saved', workspacePath: String.raw`C:\saved`,
+      memoryRoot: join(projectsRoot, 'C--saved', 'memory'), verified: true, pinned: true,
+      firstSeenAt: 1, lastSeenAt: 2, lastWriteAt: 3, sourceProfiles: ['old'],
+    }],
+  };
+  writeFileSync(registryPath + '.previous', JSON.stringify(previous));
+
+  assert.deepEqual(registry.list(), previous.workspaces);
+  assert.deepEqual(stored(registryPath), previous);
+  assert.equal(existsSync(registryPath + '.previous'), false);
 });
