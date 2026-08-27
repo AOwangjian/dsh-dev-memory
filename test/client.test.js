@@ -102,3 +102,27 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.doesNotMatch(src, /^\s*export\s/m);
 });
 
+
+test('health issue objects render a readable file/detail instead of [object Object]', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { runInNewContext } = await import('node:vm');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+  const sandbox = { module: { exports: {} }, exports: {} };
+  runInNewContext(src, sandbox);
+  const format = sandbox.module.exports.formatIssueValue;
+  assert.equal(typeof format, 'function');
+  assert.equal(format({ file: 'fishing/core/a.md', meta: '缺少状态' }), 'fishing/core/a.md — 缺少状态');
+  assert.notEqual(format({ file: 'a.md' }), '[object Object]');
+});
+
+test('panel exposes automatic root mode and workspace source', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../lib/client.js'), 'utf8');
+  assert.match(src, /rootMode/);
+  assert.match(src, /workspacePath/);
+  assert.match(src, /Use Auto/);
+});

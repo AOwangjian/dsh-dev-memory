@@ -130,6 +130,59 @@ test('session-start inject and goal-complete reminder skip when enabled is false
   assert.equal(injected.length, 0, 'goal-complete reminder skipped when disabled');
 });
 
+test('session cwd becomes the A-convention memoryRoot used by the panel', () => {
+  const { ctx, handlers } = makeCtx();
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(ctx);
+
+  const agent = {
+    id: 's1',
+    session: { id: 's1', header: { cwd: 'D:\\bydk\\F20_Client\\Fish20' } },
+    inject() {},
+  };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
+
+  const stateRoute = routes.find((r) => r.path === '/dsh-dev-memory/state');
+  let body = '';
+  stateRoute.handler(
+    { method: 'GET', headers: {} },
+    { writeHead() {}, end(chunk = '') { body += chunk; } },
+  );
+  const state = JSON.parse(body);
+  assert.match(state.config.memoryRoot, /D--bydk-F20_Client-Fish20[\\/]memory$/);
+  assert.equal(state.config.workspacePath, 'D:\\bydk\\F20_Client\\Fish20');
+  assert.equal(state.config.rootMode, 'auto');
+});
+
+test('empty memoryRoot override switches configured root back to automatic session cwd', async () => {
+  const { ctx, handlers } = makeCtx();
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(ctx, { memoryRoot: 'C:\\fixed\\memory' });
+  const agent = { id: 's1', session: { id: 's1', header: { cwd: 'D:\\bydk\\F20_Client\\Fish20' } }, inject() {} };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
+
+  const route = routes.find((r) => r.path === '/dsh-dev-memory/config');
+  const chunks = [Buffer.from(JSON.stringify({ memoryRoot: '' }))];
+  const request = {
+    method: 'POST',
+    headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270' },
+    async *[Symbol.asyncIterator]() { yield* chunks; },
+  };
+  let body = '';
+  await route.handler(request, { writeHead() {}, end(chunk = '') { body += chunk; } });
+  const response = JSON.parse(body);
+  assert.equal(response.config.rootMode, 'auto');
+  assert.match(response.config.memoryRoot, /D--bydk-F20_Client-Fish20[\\/]memory$/);
+});
+
 test('apply still registers tools when enabled is false', () => {
   const { ctx, registered } = makeCtx();
   plugin.apply(ctx, { enabled: false });
