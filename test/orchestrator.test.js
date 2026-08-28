@@ -19,6 +19,14 @@ test('Level 1 需人工确认', async () => {
   assert.equal(r.needsConfirm, true);
 });
 
+test('Level 1 确认后落盘', async () => {
+  const calls = [];
+  const svc = { write: async (x) => { calls.push(x); } };
+  const r = await runWritePass({ proposal: { ...ok, moduleLevel: 1 }, service: svc, confirmLevel1: true });
+  assert.equal(r.written, true);
+  assert.equal(calls.length, 1);
+});
+
 test('合法 proposal 落盘并审计', async () => {
   const d = mkdtempSync(join(tmpdir(), 'orch-'));
   const calls = [];

@@ -221,9 +221,12 @@ test('panel source loads workspaces and never posts browse selection to /config'
   assert.match(src, /state\?workspace=/);
   assert.match(src, /action:'pin'/);
   assert.match(src, /action:'rename'/);
-  assert.match(src, /action:'remove'/);
+  assert.match(src, /'unhide':'remove'/);
   assert.match(src, /从列表隐藏/);
   assert.match(src, /不会删除记忆目录/);
+  assert.match(src, /显示仅发现/);
+  assert.match(src, /取消隐藏/);
+  assert.match(src, /待确认/);
   assert.match(src, /打开工作目录/);
   assert.match(src, /打开记忆目录/);
   assert.match(src, /\/dsh-dev-memory\/open/);

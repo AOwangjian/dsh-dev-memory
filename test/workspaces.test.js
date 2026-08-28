@@ -88,6 +88,9 @@ test('mutate renames, pins, adds, and removes registration without deleting memo
   assert.equal(registry.get(added.id), null);
   assert.equal(existsSync(join(projectsRoot, added.id, 'memory', 'keep.md')), true);
   assert.equal(registry.scan().some((row) => row.id === added.id), false);
+  const restored = registry.mutate({ action: 'unhide', id: added.id });
+  assert.equal(restored && restored.hidden === true, false);
+  assert.equal(registry.get(added.id).id, added.id);
 });
 
 test('corrupt registry is backed up before replacement', (t) => {

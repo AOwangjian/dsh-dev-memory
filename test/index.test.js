@@ -61,6 +61,35 @@ test('hooks the 3 mapped events', () => {
   assert.ok(handlers.has(contract.EVENTS.AGENT_SESSION_START));
   assert.ok(handlers.has(contract.EVENTS.GOAL_CHANGED));
   assert.ok(handlers.has(contract.EVENTS.SESSION_DISPOSED));
+  assert.ok(handlers.has(contract.EVENTS.AGENT_STATUS));
+});
+
+test('idle status followups a write-pass once and does not loop after that turn', () => {
+  const { ctx, handlers } = makeCtx();
+  plugin.apply(ctx);
+  const followups = [];
+  const agent = {
+    id: 's1',
+    inject() {},
+    followup(m) { followups.push(m); },
+    session: { id: 's1', header: { cwd: String.raw`D:\bydk\F20_Client\Fish20` } },
+  };
+  const status = () => handlers.get(contract.EVENTS.AGENT_STATUS) || [];
+  for (const h of status()) h({ agent, status: 'running' });
+  for (const h of status()) h({ agent, status: 'idle' });
+  assert.equal(followups.length, 1);
+  assert.match(followups[0].content[0].text, /memory_write/);
+  for (const h of status()) h({ agent, status: 'running' });
+  for (const h of status()) h({ agent, status: 'idle' });
+  assert.equal(followups.length, 1, 'write-pass idle must not queue another write-pass');
+  for (const h of status()) h({ agent, status: 'running' });
+  for (const h of status()) h({ agent, status: 'idle' });
+  assert.equal(followups.length, 2, 'a later user turn may queue another write-pass');
+});
+
+test('session-start search uses the workspace name instead of the raw path', () => {
+  assert.equal(plugin.searchQueryForWorkspace(String.raw`D:\bydk\F20_Client\Fish20`), 'Fish20');
+  assert.doesNotMatch(plugin.searchQueryForWorkspace(String.raw`D:\bydk\F20_Client\Fish20`), /D:\\/);
 });
 
 test('goal/changed injects a reminder only on operation === complete', () => {
@@ -309,6 +338,7 @@ test('browsing another workspace does not change the active write target', async
   writeFileSync(join(projectsRoot, otherId, 'memory', 'note.md'), '# other');
   const listed = await getJson(byPath['/dsh-dev-memory/workspaces'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/workspaces' });
   assert.equal(listed.json.activeWorkspaceId, 'D--bydk-F20-Client-Fish20');
+  assert.equal((listed.json.workspaces || []).some((row) => row.id === otherId), false);
   const browse = await getJson(byPath['/dsh-dev-memory/state'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/state?workspace=' + otherId });
   assert.equal(browse.status, 200);
   assert.match(browse.json.config.memoryRoot, /D--bydk-F20-Client-Fish20[\\/]memory$/);
@@ -327,7 +357,7 @@ test('memory tools enrich results with workspace metadata and mark lastWriteAt o
   const memoryRoot = join(root, 'isolated-memory');
   mkdirSync(memoryRoot, { recursive: true });
   writeFileSync(join(memoryRoot, 'note.md'), '# fish');
-  const { registered, handlers, registryPath } = isolatedApply(t, {
+  const { registered, handlers, registryPath, byPath } = isolatedApply(t, {
     autoWriteLevels: [2, 3],
     memoryRoot,
     scriptsDir: join(homedir(), '.dsh', 'skills', 'dev-memory', 'scripts'),
@@ -346,6 +376,9 @@ test('memory tools enrich results with workspace metadata and mark lastWriteAt o
     },
   }, { agent });
   assert.equal(rejected.written, false);
+  assert.equal(rejected.needsConfirm, true);
+  const pending = await getJson(byPath['/dsh-dev-memory/state'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/state' });
+  assert.equal(pending.json.pendingLevel1.length, 1);
   const before = JSON.parse(readFileSync(registryPath, 'utf8')).workspaces[0].lastWriteAt;
   assert.equal(before, null);
   const created = await originalWrite.call(write, {

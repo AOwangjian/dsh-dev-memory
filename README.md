@@ -148,8 +148,8 @@ lib/
 ## 已知限制（如实说明）
 
 - 工作区选择器只改变面板浏览目标，不会把当前会话绑定到另一个项目。
-- 仅扫描发现的记忆库在打开对应项目前可能没有真实 `workspacePath`。
-- 从列表隐藏工作区登记不会删除记忆文件。
+- 默认只显示已绑定工作区；点「显示仅发现」才会扫描未绑定记忆库。
+- 从列表隐藏工作区登记不会删除记忆文件，可用「取消隐藏」找回。
 
 ## 开发
 
@@ -337,8 +337,8 @@ collapsible cards. Successful writes also appear as a compact turn-tail summary.
 
 - The workspace selector changes the panel browse target only; it does not rebind
   the current conversation write root.
-- Discovered-only memory libraries may lack a real `workspacePath` until the
-  matching project is opened.
+- The list shows bound workspaces by default; discovered-only libraries appear after
+  "显示仅发现".
 - Hiding a registry entry from the list never deletes memory files.
 
 ## Development
