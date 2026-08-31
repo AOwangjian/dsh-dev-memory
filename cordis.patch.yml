@@ -9,3 +9,4 @@
         autoWriteLevels: [2, 3]
         writeConfidenceMin: 'medium'
         enabled: true
+        autoWrite: true

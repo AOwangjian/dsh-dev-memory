@@ -74,6 +74,7 @@ function mountWith(state) {
           autoWriteLevels: snapshot.autoWriteLevels,
           writeConfidenceMin: snapshot.writeConfidenceMin,
           enabled: snapshot.enabled,
+          autoWrite: snapshot.enabled,
         },
         audit: snapshot.audit,
         health: snapshot.health,
@@ -81,7 +82,8 @@ function mountWith(state) {
       };
     },
     updateConfig(body) {
-      if (typeof body.enabled === 'boolean') snapshot.enabled = body.enabled;
+      if (typeof body.autoWrite === 'boolean') snapshot.enabled = body.autoWrite;
+      else if (typeof body.enabled === 'boolean') snapshot.enabled = body.enabled;
       if (typeof body.memoryRoot === 'string') {
         const next = body.memoryRoot.trim();
         snapshot.memoryRootOverride = next ? next : null;
@@ -97,6 +99,7 @@ function mountWith(state) {
         autoWriteLevels: snapshot.autoWriteLevels,
         writeConfidenceMin: snapshot.writeConfidenceMin,
         enabled: snapshot.enabled,
+        autoWrite: snapshot.enabled,
       };
     },
   });
@@ -119,6 +122,7 @@ test('GET /dsh-dev-memory/state returns config/audit/health/pendingLevel1', asyn
   assert.deepEqual(json.config.autoWriteLevels, [2, 3]);
   assert.equal(json.config.writeConfidenceMin, 'medium');
   assert.equal(json.config.enabled, true);
+  assert.equal(json.config.autoWrite, true);
   assert.equal(json.audit.length, 1);
   assert.deepEqual(json.health, { ok: true });
   assert.deepEqual(json.pendingLevel1, []);
@@ -134,7 +138,21 @@ test('POST /dsh-dev-memory/config updates enabled and memoryRoot', async () => {
   const json = JSON.parse(res.body);
   assert.equal(json.ok, true);
   assert.equal(json.config.enabled, false);
+  assert.equal(json.config.autoWrite, false);
   assert.equal(json.config.memoryRoot, '/tmp/override');
+});
+
+test('POST /dsh-dev-memory/config prefers autoWrite over enabled', async () => {
+  const { byPath } = mountWith();
+  const res = mockRes();
+  await byPath['/dsh-dev-memory/config'].handler(
+    jsonReq('POST', { autoWrite: false, enabled: true }, trustedHeaders()),
+    res,
+  );
+  assert.equal(res.status, 200);
+  const json = JSON.parse(res.body);
+  assert.equal(json.config.autoWrite, false);
+  assert.equal(json.config.enabled, false);
 });
 
 test('POST /dsh-dev-memory/config rejects untrusted origin', async () => {

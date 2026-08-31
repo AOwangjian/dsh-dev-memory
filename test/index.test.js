@@ -173,18 +173,85 @@ test('memory_write rejects missing or bogus confidence', async () => {
   await assert.rejects(write.execute({ proposal: { ...base, confidence: 'extreme' } }), /memory_write\.proposal\.confidence/);
 });
 
-test('session-start inject and goal-complete reminder skip when enabled is false', () => {
+test('autoWrite false skips write-pass section, goal reminder, and idle followup', () => {
   const { ctx, handlers, sections } = makeCtx();
-  plugin.apply(ctx, { enabled: false });
-  assert.equal(sections.length, 0, 'write-pass systemPrompt section skipped when disabled');
+  plugin.apply(ctx, { autoWrite: false });
+  assert.equal(sections.length, 0, 'write-pass systemPrompt section skipped when autoWrite is off');
 
   const injected = [];
-  const agent = { id: 's1', inject: (m) => injected.push(m), session: { id: 's1', header: { cwd: 'C:\\ws' } } };
-  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
-  assert.equal(injected.length, 0, 'session-start inject skipped when disabled');
-
+  const followups = [];
+  const agent = {
+    id: 's1',
+    inject: (m) => injected.push(m),
+    followup: (m) => followups.push(m),
+    session: { id: 's1', header: { cwd: 'C:\\ws' } },
+  };
   for (const h of handlers.get(contract.EVENTS.GOAL_CHANGED)) h({ agent, change: { operation: 'complete' } });
-  assert.equal(injected.length, 0, 'goal-complete reminder skipped when disabled');
+  assert.equal(injected.length, 0, 'goal-complete reminder skipped when autoWrite is off');
+  for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent, status: 'running' });
+  for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent, status: 'idle' });
+  assert.equal(followups.length, 0, 'idle followup skipped when autoWrite is off');
+});
+
+test('autoWrite false still injects memory at session start when search hits', (t) => {
+  const scriptsDir = mkdtempSync(join(tmpdir(), 'dsh-auto-write-scripts-'));
+  t.after(() => rmSync(scriptsDir, { recursive: true, force: true }));
+  writeFileSync(join(scriptsDir, 'search-memory.mjs'), [
+    'const hits = { query: process.argv[3], results: [{ file: "plugin/overview.md", score: 1, confidence: "high" }] };',
+    'process.stdout.write(JSON.stringify(hits));',
+  ].join('\n'));
+  const { ctx, handlers } = makeCtx();
+  plugin.apply(ctx, { autoWrite: false, scriptsDir, memoryRoot: scriptsDir });
+  const injected = [];
+  const agent = {
+    id: 's1',
+    inject: (m) => injected.push(m),
+    session: { id: 's1', header: { cwd: 'D:\\Projects\\dsh-dev-memory' } },
+  };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
+  assert.equal(injected.length, 1, 'session-start inject still runs when autoWrite is off');
+  assert.match(injected[0].content[0].text, /plugin\/overview\.md/);
+});
+
+test('POST autoWrite unmounts and remounts the write-pass section', async () => {
+  const { ctx, sections } = makeCtx();
+  let live = 0;
+  ctx.get = ((orig) => (key) => {
+    if (key === contract.SERVICES.SYSTEM_PROMPT) {
+      return {
+        section(s) {
+          sections.push(s);
+          live += 1;
+          return () => { live -= 1; };
+        },
+      };
+    }
+    return orig(key);
+  })(ctx.get.bind(ctx));
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(ctx);
+  assert.equal(live, 1);
+  const route = routes.find((r) => r.path === '/dsh-dev-memory/config');
+  const post = async (body) => {
+    let out = '';
+    await route.handler({
+      method: 'POST',
+      headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270' },
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)); },
+    }, { writeHead() {}, end(chunk = '') { out += chunk; } });
+    return JSON.parse(out);
+  };
+  const off = await post({ autoWrite: false });
+  assert.equal(off.config.autoWrite, false);
+  assert.equal(off.config.enabled, false);
+  assert.equal(live, 0);
+  const on = await post({ autoWrite: true });
+  assert.equal(on.config.autoWrite, true);
+  assert.equal(live, 1);
 });
 
 test('auto mode waits for a live session cwd instead of using host or registry cwd', () => {
@@ -269,9 +336,9 @@ test('empty memoryRoot override switches configured root back to automatic sessi
   assert.match(response.config.memoryRoot, /D--bydk-F20-Client-Fish20[\\/]memory$/);
 });
 
-test('apply still registers tools when enabled is false', () => {
+test('apply still registers tools when autoWrite is false', () => {
   const { ctx, registered } = makeCtx();
-  plugin.apply(ctx, { enabled: false });
+  plugin.apply(ctx, { autoWrite: false });
   assert.deepEqual(registered.map((d) => d.name).sort(), ['memory_health', 'memory_search', 'memory_write']);
 });
 

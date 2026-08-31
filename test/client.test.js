@@ -100,6 +100,10 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.match(src, /useState/);
   assert.match(src, /useEffect/);
   assert.match(src, /8000/);
+  assert.match(src, /conversation\.input\.left/);
+  assert.match(src, /autoWrite/);
+  assert.match(src, /自动记忆/);
+  assert.match(src, /自动更新/);
   assert.doesNotMatch(src, /^\s*import\s/m);
   assert.doesNotMatch(src, /^\s*export\s/m);
 });
@@ -288,6 +292,20 @@ function collectText(node) {
   }
   return '';
 }
+
+test('registers a compact auto-write toggle on conversation.input.left', () => {
+  const plugin = materialize();
+  const { ctx, registrations } = makeCtx();
+  plugin.apply(ctx);
+  const toggle = registrations.find((row) => row.options.name === 'conversation.input.left');
+  assert.ok(toggle, 'composer tool row must host the auto-memory control');
+  assert.equal(toggle.options.id, 'dev-memory-auto-write');
+  assert.equal(typeof toggle.component, 'function');
+  const tree = toggle.component();
+  assert.equal(tree.props['data-dev-memory'], 'auto-write-toggle');
+  const text = collectText(tree);
+  assert.match(text, /自动记忆/);
+});
 
 test('apply never throws on undeclared Cordis properties and keeps the settings panel', () => {
   const plugin = materialize();

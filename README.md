@@ -47,6 +47,7 @@ dsh plugin --profile <name> add <local-path>
 | `maxInjectTokens` | `1500` | 会话开始注入记忆的 token 预算 |
 | `autoWriteLevels` | `[2, 3]` | 允许自动写入的模块级别（Level 1 保留人工确认） |
 | `writeConfidenceMin` | `'medium'` | 自动写入的最低置信度（低于 medium 永不自动写） |
+| `autoWrite` | `true` | 是否在 idle / goal 完成时自动提醒写盘。关掉后仍在会话开始查询并注入记忆，三个工具也仍可用 |
 
 canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默认，
 与 Claude Code 共享、零迁移）。记忆根建议 `git init` 以支持回滚。
@@ -108,9 +109,10 @@ canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默�
 - **会话开始**：`agent/session-start` 事件 → 按当前 workspace 检索 top-2 命中 →
   按 `maxInjectTokens` 截断（整条命中保留、不切坏 JSON，约 4 字符/token）→ 通过
   `agent.inject()` 注入上下文；无命中则跳过注入。
-- **goal 完成 / 会话结束**：注册系统提示段 `dev-memory:write-pass`（order 116）
-  + `goal/changed`(`complete`) 的边界提醒。钩子只发指令、不直接落盘——真正落盘发生在
-  agent 调用 `memory_write` 时，由编排器把关。
+- **goal 完成 / 会话结束**：当 `autoWrite` 开启时，注册系统提示段
+  `dev-memory:write-pass`（order 116）+ `goal/changed`(`complete`) 与 idle 的边界提醒。
+  关掉后仍在会话开始查询并注入，只停自动更新。钩子只发指令、不直接落盘——真正落盘发生在
+  agent 调用 `memory_write` 时，由编排器把关。输入栏 Full access 同行有「自动记忆」开关。
 
 ### 分类门（写前把关）
 
@@ -227,6 +229,7 @@ the profile layer:
 | `maxInjectTokens` | `1500` | Token budget for the memory injected at session start |
 | `autoWriteLevels` | `[2, 3]` | Module levels allowed to auto-write (Level 1 keeps manual confirmation) |
 | `writeConfidenceMin` | `'medium'` | Minimum confidence for auto-write (below `medium` never auto-writes) |
+| `autoWrite` | `true` | Whether to remind the agent to write memory at idle / goal-complete. When off, session-start search still injects; the three tools stay available |
 
 The canonical memory root is `~/.claude/projects/<slug>/memory` (the dev-memory
 official default, shared with Claude Code with zero migration). `git init` the
@@ -292,11 +295,13 @@ JSON results.
   current workspace → truncate to `maxInjectTokens` (whole hits kept, never slices
   JSON mid-string, ~4 chars/token) → inject context via `agent.inject()`; skip
   injection when there are no hits.
-- **Goal completion / session end**: register the `dev-memory:write-pass`
-  system-prompt section (order 116) + a boundary reminder on
-  `goal/changed`(`complete`). Hooks only instruct; they never write directly —
-  the actual write happens when the agent calls `memory_write` and is gated by the
-  orchestrator.
+- **Goal completion / session end**: when `autoWrite` is on, register the
+  `dev-memory:write-pass` system-prompt section (order 116) plus boundary reminders
+  on `goal/changed`(`complete`) and idle. Turning it off still injects at session
+  start and leaves the three tools available. Hooks only instruct; they never write
+  directly — the actual write happens when the agent calls `memory_write` and is
+  gated by the orchestrator. The composer tool row has an “自动记忆” toggle next
+  to Full access.
 
 ### Classification gate (pre-write guard)
 
