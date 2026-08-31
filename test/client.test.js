@@ -107,6 +107,9 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.match(src, /新对话默认/);
   assert.match(src, /\/dsh-dev-memory\/session-auto-write/);
   assert.match(src, /sessionId/);
+  assert.match(src, /conversation\.input\.dock/);
+  assert.match(src, /正在写入记忆/);
+  assert.match(src, /stopWritePass/);
   assert.doesNotMatch(src, /^\s*import\s/m);
   assert.doesNotMatch(src, /^\s*export\s/m);
 });
@@ -233,7 +236,8 @@ test('panel source loads workspaces and never posts browse selection to /config'
   assert.match(src, /不会删除记忆目录/);
   assert.match(src, /显示仅发现/);
   assert.match(src, /取消隐藏/);
-  assert.match(src, /待确认/);
+  assert.doesNotMatch(src, /待确认/);
+  assert.doesNotMatch(src, /confirmLevel1/);
   assert.match(src, /打开工作目录/);
   assert.match(src, /打开记忆目录/);
   assert.match(src, /\/dsh-dev-memory\/open/);
@@ -308,6 +312,17 @@ test('registers a compact auto-write toggle on conversation.input.left', () => {
   assert.equal(tree.props['data-dev-memory'], 'auto-write-toggle');
   const text = collectText(tree);
   assert.match(text, /自动记忆/);
+});
+
+test('registers a write-pass status dock that can stop the current turn', () => {
+  const plugin = materialize();
+  const { ctx, registrations } = makeCtx();
+  plugin.apply(ctx);
+  const dock = registrations.find((row) => row.options.name === 'conversation.input.dock');
+  assert.ok(dock, 'composer dock must host the write-pass status');
+  assert.equal(dock.options.id, 'dev-memory-write-pass');
+  const tree = dock.component();
+  assert.equal(tree, null);
 });
 
 test('apply never throws on undeclared Cordis properties and keeps the settings panel', () => {

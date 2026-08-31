@@ -87,6 +87,56 @@ test('idle status followups a write-pass once and does not loop after that turn'
   assert.equal(followups.length, 2, 'a later user turn may queue another write-pass');
 });
 
+test('write-pass followup reports active until idle and stop cancels only that turn', async () => {
+  const { ctx, handlers } = makeCtx();
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(ctx);
+  const cancels = [];
+  const agent = {
+    id: 's1',
+    inject() {},
+    followup() { return true; },
+    cancel(cause) { cancels.push(cause); },
+    session: { id: 's1', header: { cwd: 'C:\\ws' } },
+  };
+  const status = () => handlers.get(contract.EVENTS.AGENT_STATUS) || [];
+  const byPath = Object.fromEntries(routes.map((r) => [r.path, r]));
+  const getWrite = async () => {
+    let out = '';
+    await byPath['/dsh-dev-memory/session-auto-write'].handler(
+      { method: 'GET', headers: {}, url: '/dsh-dev-memory/session-auto-write?sessionId=s1' },
+      { writeHead() {}, end(chunk = '') { out += chunk; } },
+    );
+    return JSON.parse(out);
+  };
+  const postStop = async () => {
+    let out = '';
+    await byPath['/dsh-dev-memory/session-auto-write'].handler({
+      method: 'POST',
+      headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270' },
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ sessionId: 's1', action: 'stopWritePass' })); },
+    }, { writeHead() {}, end(chunk = '') { out += chunk; } });
+    return JSON.parse(out);
+  };
+  for (const h of status()) h({ agent, status: 'running' });
+  assert.equal((await getWrite()).writePass.active, false, 'ordinary user turn is not a write-pass');
+  for (const h of status()) h({ agent, status: 'idle' });
+  assert.equal((await getWrite()).writePass.active, true, 'queued write-pass followup is visible');
+  for (const h of status()) h({ agent, status: 'running' });
+  assert.equal((await getWrite()).writePass.active, true);
+  const stopped = await postStop();
+  assert.equal(stopped.ok, true);
+  assert.equal(stopped.session.writePass.active, false);
+  assert.equal(cancels.length, 1);
+  assert.equal(cancels[0].kind, 'user');
+  for (const h of status()) h({ agent, status: 'idle' });
+  assert.equal((await getWrite()).writePass.active, false);
+});
+
 test('session-start search uses the workspace name instead of the raw path', () => {
   assert.equal(plugin.searchQueryForWorkspace(String.raw`D:\bydk\F20_Client\Fish20`), 'Fish20');
   assert.doesNotMatch(plugin.searchQueryForWorkspace(String.raw`D:\bydk\F20_Client\Fish20`), /D:\\/);
@@ -513,18 +563,15 @@ test('memory tools enrich results with workspace metadata and mark lastWriteAt o
   const health = registered.find((d) => d.name === 'memory_health');
   search.execute = async () => ({ query: 'q', results: [{ file: 'note.md' }] });
   const originalWrite = write.execute;
-  const rejected = await write.execute({
+  const level1 = await write.execute({
     proposal: {
       module: 'fishing/core', category: 'fact', confidence: 'high', evidence: ['a'],
       draft: { relPath: 'fishing/core.md', content: '# skipped' }, moduleLevel: 1,
     },
   }, { agent });
-  assert.equal(rejected.written, false);
-  assert.equal(rejected.needsConfirm, true);
+  assert.equal(level1.written, true);
   const pending = await getJson(byPath['/dsh-dev-memory/state'], { method: 'GET', headers: {}, url: '/dsh-dev-memory/state' });
-  assert.equal(pending.json.pendingLevel1.length, 1);
-  const before = JSON.parse(readFileSync(registryPath, 'utf8')).workspaces[0].lastWriteAt;
-  assert.equal(before, null);
+  assert.equal((pending.json.pendingLevel1 || []).length, 0);
   const created = await originalWrite.call(write, {
     proposal: {
       module: 'fishing/core', category: 'fact', confidence: 'high', evidence: ['a'],

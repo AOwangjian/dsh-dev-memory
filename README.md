@@ -75,7 +75,7 @@ canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默�
 仅在 goal 完成 / 会话结束边界调用。参数 `proposal` 必填，包含
 `module` / `category`（`fact` | `pitfall` | `open_question`）/
 `confidence`（`low` | `medium` | `high`）/ `evidence`（非空数组）/
-`draft`（`relPath` + `content`），可选 `moduleLevel`（整数，1 需人工确认）。
+`draft`（`relPath` + `content`），可选 `moduleLevel`。对话里调用 `memory_write` 就是确认，不再去设置页审核。
 
 ```json
 {
@@ -124,7 +124,7 @@ canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默�
 
 ### 创建流 & 可回滚
 
-- 新模块：Level 2-3 全自动创建，Level 1（新主域）返回 `needsConfirm`，需人工确认。
+- 新模块：对话里 `memory_write` 通过分类门后直接落盘。自动记忆开关只控制是否催写，不拦手动工具。
 - 每次落盘后追加一条 append-only 审计（`<memoryRoot>/.audit/audit.jsonl`，
   记录 何时/会话/模块/分类/置信度/证据来源/动作）。
 - 记忆根 git 跟踪 + 审计，实现「可回滚 / 可审查 / 可淘汰」。
@@ -258,8 +258,8 @@ Returns JSON: `{ query, terms, results: [{ file, score, confidence, matched, sug
 Call only at a goal-completion or session-end boundary. The `proposal` argument is
 required and contains `module` / `category` (`fact` | `pitfall` | `open_question`) /
 `confidence` (`low` | `medium` | `high`) / `evidence` (non-empty array) /
-`draft` (`relPath` + `content`), plus optional `moduleLevel` (integer; `1`
-requires manual confirmation).
+`draft` (`relPath` + `content`), plus optional `moduleLevel`. Calling
+`memory_write` in the conversation is the confirmation; there is no settings-panel gate.
 
 ```json
 {
@@ -313,8 +313,9 @@ A `memory_write` proposal must pass `classify.js`:
 
 ### Creation flow & reversibility
 
-- New modules: Level 2-3 are created fully automatically; Level 1 (a new primary
-  domain) returns `needsConfirm` and requires manual confirmation.
+- New modules: a conversation `memory_write` that passes the classification gate
+  is written immediately. The auto-memory toggle only controls write-pass
+  reminders; it does not block the tool.
 - Every write appends an append-only audit entry
   (`<memoryRoot>/.audit/audit.jsonl`, recording when / session / module / category /
   confidence / evidence source / action).

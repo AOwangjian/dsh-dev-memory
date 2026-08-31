@@ -254,6 +254,22 @@ test('GET /dsh-dev-memory/session-auto-write returns default when no override', 
   assert.equal(json.inherited, true);
 });
 
+test('POST stopWritePass is forwarded without requiring autoWrite', async () => {
+  const webServer = makeWebServer();
+  let saved;
+  mountDevMemoryRoutes(webServer, {
+    getSnapshot() { return {}; },
+    updateConfig() { return {}; },
+    setSessionAutoWrite(body) { saved = body; return { sessionId: body.sessionId, writePass: { active: false } }; },
+  });
+  const route = Object.fromEntries(webServer.routes.map((r) => [r.path, r]))['/dsh-dev-memory/session-auto-write'];
+  const res = mockRes();
+  await route.handler(jsonReq('POST', { sessionId: 'sess-a', action: 'stopWritePass' }, trustedHeaders()), res);
+  assert.equal(res.status, 200);
+  assert.equal(saved.action, 'stopWritePass');
+  assert.equal(saved.sessionId, 'sess-a');
+});
+
 test('POST /dsh-dev-memory/session-auto-write requires a trusted origin and sessionId', async () => {
   const webServer = makeWebServer();
   let saved;

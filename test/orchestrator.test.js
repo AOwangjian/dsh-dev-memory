@@ -13,17 +13,12 @@ test('changelog 不落盘', async () => {
   assert.match(r.reason, /changelog/);
 });
 
-test('Level 1 需人工确认', async () => {
-  const r = await runWritePass({ proposal: { ...ok, moduleLevel: 1 }, service: fakeSvc(), auditPath: 'x', sessionId: 's' });
-  assert.equal(r.written, false);
-  assert.equal(r.needsConfirm, true);
-});
-
-test('Level 1 确认后落盘', async () => {
+test('Level 1 writes in the conversation without a settings-panel gate', async () => {
   const calls = [];
   const svc = { write: async (x) => { calls.push(x); } };
-  const r = await runWritePass({ proposal: { ...ok, moduleLevel: 1 }, service: svc, confirmLevel1: true });
+  const r = await runWritePass({ proposal: { ...ok, moduleLevel: 1 }, service: svc, auditPath: 'x', sessionId: 's' });
   assert.equal(r.written, true);
+  assert.equal(r.needsConfirm, undefined);
   assert.equal(calls.length, 1);
 });
 
@@ -48,7 +43,7 @@ test('合法 proposal 落盘并审计', async () => {
   rmSync(d, { recursive: true, force: true });
 });
 
-test('autoWriteLevels 排除的等级不自动落盘', async () => {
+test('autoWriteLevels 不再把对话内 memory_write 拦到设置页', async () => {
   const calls = [];
   const svc = { write: async (x) => { calls.push(x); } };
   const r = await runWritePass({
@@ -58,9 +53,8 @@ test('autoWriteLevels 排除的等级不自动落盘', async () => {
     sessionId: 's',
     autoWriteLevels: [2, 3],
   });
-  assert.equal(r.written, false);
-  assert.equal(r.needsConfirm, true);
-  assert.equal(calls.length, 0);
+  assert.equal(r.written, true);
+  assert.equal(calls.length, 1);
 });
 
 test('autoWriteLevels 命中的等级自动落盘', async () => {
@@ -75,7 +69,7 @@ test('autoWriteLevels 命中的等级自动落盘', async () => {
   assert.equal(calls.length, 1);
 });
 
-test('Level 1 即使在 autoWriteLevels 也需确认', async () => {
+test('Level 1 writes even when listed in autoWriteLevels', async () => {
   const calls = [];
   const svc = { write: async (x) => { calls.push(x); } };
   const r = await runWritePass({
@@ -83,9 +77,8 @@ test('Level 1 即使在 autoWriteLevels 也需确认', async () => {
     service: svc,
     autoWriteLevels: [1, 2, 3],
   });
-  assert.equal(r.written, false);
-  assert.equal(r.needsConfirm, true);
-  assert.equal(calls.length, 0);
+  assert.equal(r.written, true);
+  assert.equal(calls.length, 1);
 });
 
 test('writeConfidenceMin 传入 classify', async () => {
