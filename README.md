@@ -17,8 +17,7 @@
 - **该更新时更新** —— goal 完成 / 会话结束时，通过写盘指令让 agent 调用 `memory_write` 沉淀增量。
 - **该创建时创建** —— 新模块按级别自动创建（Level 2-3 全自动，Level 1 保留一道人工确认）。
 
-插件只是薄薄一层编排：dev-memory 的脚本（`search-memory.mjs` / `memory-crud.mjs` /
-`health-check.mjs`）与规则仍是唯一真源，skill 一更新插件自动跟随，无双份漂移。
+插件自带这三份脚本（外加 `utils.mjs`）。本机已装 `dev-memory` 技能时优先用技能目录，没有技能则用包内副本。朋友只需 `dsh plugin add dsh-dev-memory`，不必再装技能。
 
 ## 安装
 
@@ -42,15 +41,16 @@ dsh plugin --profile <name> add <local-path>
 
 | 键 | 默认 | 含义 |
 |---|---|---|
-| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | 记忆根目录；slug = workspace 路径把冒号、目录分隔符和下划线替换成 `-` |
-| `scriptsDir` | `''` → `~/.dsh/skills/dev-memory/scripts` | dev-memory 脚本目录 |
+| `memoryRoot` | `''` → 见下方默认根 | 显式记忆根。空则按工作区 slug 自动选：已有 `~/.claude/projects/<slug>/memory` 继续用；否则写到 `~/.dsh/dev-memory/projects/<slug>/memory`（不依赖 Claude Code） |
+| `scriptsDir` | `''` → 本机技能脚本，否则用包内副本 | 显式配置优先；空则用 `~/.dsh/skills/dev-memory/scripts`（四个 `.mjs` 都在才用）；再没有则用包内 `scripts/`。没有 dev-memory 技能也能装着用 |
 | `maxInjectTokens` | `1500` | 会话开始注入记忆的 token 预算 |
 | `autoWriteLevels` | `[2, 3]` | 允许自动写入的模块级别（Level 1 保留人工确认） |
 | `writeConfidenceMin` | `'medium'` | 自动写入的最低置信度（低于 medium 永不自动写） |
 | `autoWrite` | `true` | 新对话的自动更新默认值。输入栏「自动记忆」只改当前对话；关掉后仍在会话开始查询并注入记忆，三个工具也仍可用 |
 
-canonical 记忆根 = `~/.claude/projects/<slug>/memory`（dev-memory 官方默认，
-与 Claude Code 共享、零迁移）。记忆根建议 `git init` 以支持回滚。
+默认记忆根不依赖 Claude Code：没有现成的 `~/.claude/projects/<slug>/memory` 时，
+写到 `~/.dsh/dev-memory/projects/<slug>/memory`。本机已有 Claude 库则继续用，零迁移。
+记忆根建议 `git init` 以支持回滚。
 
 所有 DSH profile 共用一份工作区注册表：`~/.dsh/dev-memory/workspaces.json`。
 会话开始时按当前 `cwd` 自动登记；设置页可以浏览任意已登记工作区的健康状态和 changelog。
@@ -195,10 +195,9 @@ reimplements them.
 - **Create when needed** — new modules are created by level (Level 2-3 fully
   automatic, Level 1 keeps one human confirmation).
 
-The plugin is only a thin orchestration layer: the dev-memory scripts
-(`search-memory.mjs` / `memory-crud.mjs` / `health-check.mjs`) and rules remain
-the single source of truth, so the plugin follows skill updates automatically with
-no double drift.
+The plugin ships those three scripts (plus `utils.mjs`). A local `dev-memory`
+skill directory wins when present; otherwise the packaged copy is used. Friends
+only need `dsh plugin add dsh-dev-memory` — the skill is optional.
 
 ## Install
 
@@ -224,16 +223,16 @@ the profile layer:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `memoryRoot` | `''` → `~/.claude/projects/<slug>/memory` | Memory root; slug = workspace path with the colon, directory separator, and underscore replaced by `-` |
-| `scriptsDir` | `''` → `~/.dsh/skills/dev-memory/scripts` | dev-memory scripts directory |
+| `memoryRoot` | `''` → see default root below | Explicit memory root. Empty auto-selects by workspace slug: keep `~/.claude/projects/<slug>/memory` when it already exists; otherwise write to `~/.dsh/dev-memory/projects/<slug>/memory` (no Claude Code required) |
+| `scriptsDir` | `''` → local skill scripts, else the bundled copy | Explicit config wins; empty uses `~/.dsh/skills/dev-memory/scripts` when the four `.mjs` files exist; otherwise the packaged `scripts/`. Works without the dev-memory skill |
 | `maxInjectTokens` | `1500` | Token budget for the memory injected at session start |
 | `autoWriteLevels` | `[2, 3]` | Module levels allowed to auto-write (Level 1 keeps manual confirmation) |
 | `writeConfidenceMin` | `'medium'` | Minimum confidence for auto-write (below `medium` never auto-writes) |
 | `autoWrite` | `true` | Default for new conversations. The composer toggle overrides only the current session. When off, session-start search still injects; the three tools stay available |
 
-The canonical memory root is `~/.claude/projects/<slug>/memory` (the dev-memory
-official default, shared with Claude Code with zero migration). `git init` the
-memory root for rollback.
+The default memory root does not require Claude Code: if `~/.claude/projects/<slug>/memory`
+is missing, writes go to `~/.dsh/dev-memory/projects/<slug>/memory`. An existing Claude
+library is kept (zero migration). `git init` the memory root for rollback.
 
 All DSH profiles share `~/.dsh/dev-memory/workspaces.json`. Live session cwd is
 registered automatically. The settings panel can browse another workspace's health

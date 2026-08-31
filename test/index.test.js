@@ -37,6 +37,52 @@ test('imports with no side effects and exposes the plugin shape', () => {
   assert.equal(plugin.default.apply, plugin.apply);
 });
 
+function writeScripts(dir) {
+  mkdirSync(dir, { recursive: true });
+  for (const name of ['search-memory.mjs', 'memory-crud.mjs', 'health-check.mjs', 'utils.mjs']) {
+    writeFileSync(join(dir, name), '// stub\n');
+  }
+  return dir;
+}
+
+test('resolveScriptsDir prefers a configured directory that has the three scripts', () => {
+  const configured = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-cfg-')));
+  const skill = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-skill-')));
+  const bundled = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-bundled-')));
+  assert.equal(plugin.resolveScriptsDir({
+    configured,
+    skillDir: skill,
+    bundledDir: bundled,
+  }), configured);
+});
+
+test('resolveScriptsDir uses the local skill when config is empty', () => {
+  const skill = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-skill-')));
+  const bundled = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-bundled-')));
+  assert.equal(plugin.resolveScriptsDir({
+    configured: '',
+    skillDir: skill,
+    bundledDir: bundled,
+  }), skill);
+});
+
+test('resolveScriptsDir falls back to bundled scripts when the skill is missing', () => {
+  const bundled = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-bundled-')));
+  const missing = join(tmpdir(), 'dsh-scripts-missing-' + Date.now());
+  assert.equal(plugin.resolveScriptsDir({
+    configured: '',
+    skillDir: missing,
+    bundledDir: bundled,
+  }), bundled);
+});
+
+test('the package ships the four runtime scripts next to lib', () => {
+  const dir = plugin.bundledScriptsDir();
+  for (const name of ['search-memory.mjs', 'memory-crud.mjs', 'health-check.mjs', 'utils.mjs']) {
+    assert.equal(existsSync(join(dir, name)), true, name);
+  }
+});
+
 test('apply registers 3 tools via ctx.tools.register and the write-pass section', () => {
   const { ctx, registered, sections } = makeCtx();
   assert.doesNotThrow(() => plugin.apply(ctx));
@@ -313,6 +359,9 @@ test('autoWrite false still injects memory at session start when search hits', (
     'const hits = { query: process.argv[3], results: [{ file: "plugin/overview.md", score: 1, confidence: "high" }] };',
     'process.stdout.write(JSON.stringify(hits));',
   ].join('\n'));
+  writeFileSync(join(scriptsDir, 'memory-crud.mjs'), 'process.stdout.write("{}");\n');
+  writeFileSync(join(scriptsDir, 'health-check.mjs'), 'process.stdout.write("{}");\n');
+  writeFileSync(join(scriptsDir, 'utils.mjs'), 'export {};\n');
   const { ctx, handlers } = makeCtx();
   plugin.apply(ctx, { autoWrite: false, scriptsDir, memoryRoot: scriptsDir });
   const injected = [];
@@ -465,7 +514,26 @@ test('auto mode waits for a live session cwd instead of using host or registry c
 
 test('A-convention slug replaces POSIX separators without escaping the projects root', () => {
   assert.equal(plugin.slugOf('/work/app'), '-work-app');
-  assert.match(plugin.deriveRoot('/work/app'), /[\\/]\.claude[\\/]projects[\\/]-work-app[\\/]memory$/);
+});
+
+test('deriveRoot uses the DSH projects directory when Claude memory is absent', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-derive-dsh-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const claudeRoot = join(root, '.claude', 'projects');
+  const dshRoot = join(root, '.dsh', 'dev-memory', 'projects');
+  mkdirSync(claudeRoot, { recursive: true });
+  mkdirSync(dshRoot, { recursive: true });
+  assert.equal(plugin.deriveRoot('/work/app', { claudeRoot, dshRoot }), join(dshRoot, '-work-app', 'memory'));
+});
+
+test('deriveRoot keeps an existing Claude memory library', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-derive-claude-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const claudeRoot = join(root, '.claude', 'projects');
+  const dshRoot = join(root, '.dsh', 'dev-memory', 'projects');
+  mkdirSync(join(claudeRoot, '-work-app', 'memory'), { recursive: true });
+  mkdirSync(dshRoot, { recursive: true });
+  assert.equal(plugin.deriveRoot('/work/app', { claudeRoot, dshRoot }), join(claudeRoot, '-work-app', 'memory'));
 });
 
 test('A-convention slug also replaces underscores so F20_Client maps to F20-Client', () => {

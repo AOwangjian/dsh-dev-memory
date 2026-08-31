@@ -1,6 +1,6 @@
 {
   "name": "dsh-dev-memory",
-  "version": "0.4.13",
+  "version": "0.4.14",
   "description": "Ambient project-memory for DeepSeek Harness: auto query/update/create module memory via a Cordis plugin.",
   "keywords": [
     "dsh",
@@ -24,6 +24,10 @@
   },
   "files": [
     "lib",
+    "scripts/search-memory.mjs",
+    "scripts/memory-crud.mjs",
+    "scripts/health-check.mjs",
+    "scripts/utils.mjs",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
