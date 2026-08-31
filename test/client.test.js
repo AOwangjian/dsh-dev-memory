@@ -110,6 +110,7 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.match(src, /正在写入记忆/);
   assert.match(src, /stopWritePass/);
   assert.match(src, /conversation\.input\.dock/);
+  assert.match(src, /--dsh-composer-card-max-width/);
   assert.doesNotMatch(src, /conversation\.session\.header\.actions/);
   assert.doesNotMatch(src, /^\s*import\s/m);
   assert.doesNotMatch(src, /^\s*export\s/m);
