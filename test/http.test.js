@@ -233,6 +233,47 @@ test('POST /dsh-dev-memory/workspaces mutates only from a trusted origin', async
   assert.equal(command.action, 'pin');
 });
 
+test('GET /dsh-dev-memory/session-auto-write returns default when no override', async () => {
+  const webServer = makeWebServer();
+  mountDevMemoryRoutes(webServer, {
+    getSnapshot() { return { config: { autoWrite: true } }; },
+    updateConfig() { return {}; },
+    getSessionAutoWrite(request) {
+      const url = new URL(request.url || '/', 'http://localhost');
+      return { sessionId: url.searchParams.get('sessionId'), autoWrite: true, inherited: true };
+    },
+  });
+  const route = Object.fromEntries(webServer.routes.map((r) => [r.path, r]))['/dsh-dev-memory/session-auto-write'];
+  assert.ok(route);
+  const res = mockRes();
+  await route.handler({ method: 'GET', headers: {}, url: '/dsh-dev-memory/session-auto-write?sessionId=sess-a' }, res);
+  assert.equal(res.status, 200);
+  const json = JSON.parse(res.body);
+  assert.equal(json.sessionId, 'sess-a');
+  assert.equal(json.autoWrite, true);
+  assert.equal(json.inherited, true);
+});
+
+test('POST /dsh-dev-memory/session-auto-write requires a trusted origin and sessionId', async () => {
+  const webServer = makeWebServer();
+  let saved;
+  mountDevMemoryRoutes(webServer, {
+    getSnapshot() { return {}; },
+    updateConfig() { return {}; },
+    setSessionAutoWrite(body) { saved = body; return { sessionId: body.sessionId, autoWrite: body.autoWrite, inherited: false }; },
+  });
+  const route = Object.fromEntries(webServer.routes.map((r) => [r.path, r]))['/dsh-dev-memory/session-auto-write'];
+  const denied = mockRes();
+  await route.handler(jsonReq('POST', { sessionId: 'sess-a', autoWrite: false }, { origin: 'http://evil.example', host: '127.0.0.1:12393' }), denied);
+  assert.equal(denied.status, 403);
+  const ok = mockRes();
+  await route.handler(jsonReq('POST', { sessionId: 'sess-a', autoWrite: false }, trustedHeaders()), ok);
+  assert.equal(ok.status, 200);
+  assert.equal(JSON.parse(ok.body).ok, true);
+  assert.equal(saved.sessionId, 'sess-a');
+  assert.equal(saved.autoWrite, false);
+});
+
 test('POST /dsh-dev-memory/open reveals a trusted local path', async () => {
   const webServer = makeWebServer();
   let opened;

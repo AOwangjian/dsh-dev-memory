@@ -213,6 +213,83 @@ test('autoWrite false still injects memory at session start when search hits', (
   assert.match(injected[0].content[0].text, /plugin\/overview\.md/);
 });
 
+test('session autoWrite override skips idle followup for that session only', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-session-aw-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const { ctx, handlers } = makeCtx();
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(ctx, {
+    autoWrite: true,
+    sessionAutoWritePath: join(root, 'session-auto-write.json'),
+    registryPath: join(root, 'workspaces.json'),
+    projectsRoot: join(root, 'projects'),
+    scriptsDir: join(root, 'scripts'),
+  });
+  mkdirSync(join(root, 'projects'), { recursive: true });
+  const followups = [];
+  const agentA = {
+    id: 'sess-a',
+    followup(m) { followups.push('a:' + m.content[0].text); },
+    session: { id: 'sess-a', header: { cwd: 'C:\\ws-a', parentSession: undefined } },
+  };
+  const agentB = {
+    id: 'sess-b',
+    followup(m) { followups.push('b:' + m.content[0].text); },
+    session: { id: 'sess-b', header: { cwd: 'C:\\ws-b' } },
+  };
+  const byPath = Object.fromEntries(routes.map((r) => [r.path, r]));
+  const post = async (body) => {
+    let out = '';
+    await byPath['/dsh-dev-memory/session-auto-write'].handler({
+      method: 'POST',
+      headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270' },
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)); },
+    }, { writeHead() {}, end(chunk = '') { out += chunk; } });
+    return JSON.parse(out);
+  };
+  return post({ sessionId: 'sess-a', autoWrite: false }).then((saved) => {
+    assert.equal(saved.ok, true);
+    assert.equal(saved.session.autoWrite, false);
+    assert.equal(saved.session.inherited, false);
+    for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent: agentA, status: 'running' });
+    for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent: agentA, status: 'idle' });
+    for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent: agentB, status: 'running' });
+    for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent: agentB, status: 'idle' });
+    assert.equal(followups.some((x) => x.startsWith('a:')), false, 'overridden session must not followup');
+    assert.equal(followups.some((x) => x.startsWith('b:')), true, 'other session still follows the default');
+  });
+});
+
+test('child session inherits parent autoWrite override', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-session-aw-child-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'session-auto-write.json'), JSON.stringify({
+    version: 1,
+    sessions: { 'parent-1': { autoWrite: false } },
+  }));
+  const { ctx, handlers } = makeCtx();
+  plugin.apply(ctx, {
+    autoWrite: true,
+    sessionAutoWritePath: join(root, 'session-auto-write.json'),
+    registryPath: join(root, 'workspaces.json'),
+    projectsRoot: join(root, 'projects'),
+    scriptsDir: join(root, 'scripts'),
+  });
+  const followups = [];
+  const child = {
+    id: 'child-1',
+    followup(m) { followups.push(m); },
+    session: { id: 'child-1', header: { cwd: 'C:\\ws', parentSession: 'parent-1' } },
+  };
+  for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent: child, status: 'running' });
+  for (const h of handlers.get(contract.EVENTS.AGENT_STATUS) || []) h({ agent: child, status: 'idle' });
+  assert.equal(followups.length, 0);
+});
+
 test('POST autoWrite unmounts and remounts the write-pass section', async () => {
   const { ctx, sections } = makeCtx();
   let live = 0;
@@ -360,7 +437,7 @@ test('ctx.inject(["webServer"]) mounts state and config routes', () => {
   };
   plugin.apply(ctx);
   assert.deepEqual(injected, ['webServer']);
-  assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/open', '/dsh-dev-memory/state', '/dsh-dev-memory/workspaces']);
+  assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/open', '/dsh-dev-memory/session-auto-write', '/dsh-dev-memory/state', '/dsh-dev-memory/workspaces']);
 });
 
 function isolatedApply(t, extra = {}) {
