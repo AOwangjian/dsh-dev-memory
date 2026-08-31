@@ -62,6 +62,7 @@ test('hooks the 3 mapped events', () => {
   assert.ok(handlers.has(contract.EVENTS.GOAL_CHANGED));
   assert.ok(handlers.has(contract.EVENTS.SESSION_DISPOSED));
   assert.ok(handlers.has(contract.EVENTS.AGENT_STATUS));
+  assert.ok(handlers.has(contract.EVENTS.AGENT_INBOX_INSERTED));
 });
 
 test('idle status followups a write-pass once and does not loop after that turn', () => {
@@ -134,6 +135,46 @@ test('write-pass followup reports active until idle and stop cancels only that t
   assert.equal(cancels.length, 1);
   assert.equal(cancels[0].kind, 'user');
   for (const h of status()) h({ agent, status: 'idle' });
+  assert.equal((await getWrite()).writePass.active, false);
+});
+
+test('queued user message preempts an active write-pass without stopping plugin followups', async () => {
+  const { ctx, handlers } = makeCtx();
+  const routes = [];
+  ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(ctx);
+  const cancels = [];
+  const agent = {
+    id: 's1',
+    inject() {},
+    followup() { return true; },
+    cancel(cause) { cancels.push(cause); },
+    session: { id: 's1', header: { cwd: 'C:\\ws' } },
+  };
+  const status = () => handlers.get(contract.EVENTS.AGENT_STATUS) || [];
+  const inbox = () => handlers.get(contract.EVENTS.AGENT_INBOX_INSERTED) || [];
+  const byPath = Object.fromEntries(routes.map((r) => [r.path, r]));
+  const getWrite = async () => {
+    let out = '';
+    await byPath['/dsh-dev-memory/session-auto-write'].handler(
+      { method: 'GET', headers: {}, url: '/dsh-dev-memory/session-auto-write?sessionId=s1' },
+      { writeHead() {}, end(chunk = '') { out += chunk; } },
+    );
+    return JSON.parse(out);
+  };
+  for (const h of status()) h({ agent, status: 'running' });
+  for (const h of status()) h({ agent, status: 'idle' });
+  for (const h of status()) h({ agent, status: 'running' });
+  assert.equal((await getWrite()).writePass.active, true);
+  for (const h of inbox()) h({ agent, message: { source: { kind: 'plugin', plugin: 'dsh-dev-memory' } } });
+  assert.equal(cancels.length, 0, 'plugin followup must not preempt itself');
+  assert.equal((await getWrite()).writePass.active, true);
+  for (const h of inbox()) h({ agent, message: { source: { kind: 'user' } } });
+  assert.equal(cancels.length, 1);
+  assert.equal(cancels[0].kind, 'user');
   assert.equal((await getWrite()).writePass.active, false);
 });
 
