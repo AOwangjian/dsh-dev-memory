@@ -109,8 +109,8 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.match(src, /sessionId/);
   assert.match(src, /正在写入记忆/);
   assert.match(src, /stopWritePass/);
+  assert.match(src, /conversation\.input\.dock/);
   assert.doesNotMatch(src, /conversation\.session\.header\.actions/);
-  assert.doesNotMatch(src, /conversation\.input\.dock/);
   assert.doesNotMatch(src, /^\s*import\s/m);
   assert.doesNotMatch(src, /^\s*export\s/m);
 });
@@ -315,14 +315,13 @@ test('registers a compact auto-write toggle on conversation.input.left', () => {
   assert.match(text, /自动记忆/);
 });
 
-test('registers a compact write-pass control beside the composer auto-memory toggle', () => {
+test('registers a write-pass status row above the composer like the queue dock', () => {
   const plugin = materialize();
   const { ctx, registrations } = makeCtx();
   plugin.apply(ctx);
-  const chips = registrations.filter((row) => row.options.name === 'conversation.input.left');
-  const writePass = chips.find((row) => row.options.id === 'dev-memory-write-pass');
-  assert.ok(writePass, 'composer tool row must host the compact write-pass chip');
-  const tree = writePass.component();
+  const dock = registrations.find((row) => row.options.name === 'conversation.input.dock' && row.options.id === 'dev-memory-write-pass');
+  assert.ok(dock, 'composer dock must host the write-pass status above the input');
+  const tree = dock.component();
   assert.equal(tree, null);
 });
 

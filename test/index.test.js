@@ -148,11 +148,14 @@ test('queued user message preempts an active write-pass without stopping plugin 
   });
   plugin.apply(ctx);
   const cancels = [];
+  const wakes = [];
   const agent = {
     id: 's1',
     inject() {},
     followup() { return true; },
+    send(message, target, wakeup) { wakes.push({ message, target, wakeup }); },
     cancel(cause, options) { cancels.push({ cause, options }); },
+    inbox: { hasPending: true, nextTurn: [{ source: { kind: 'user' } }] },
     session: { id: 's1', header: { cwd: 'C:\\ws' } },
   };
   const status = () => handlers.get(contract.EVENTS.AGENT_STATUS) || [];
@@ -178,6 +181,8 @@ test('queued user message preempts an active write-pass without stopping plugin 
   assert.equal(cancels[0].cause.kind, 'user');
   assert.equal(cancels[0].options && cancels[0].options.keepInbox, true, 'queued user message must survive cancel');
   assert.equal((await getWrite()).writePass.active, false);
+  assert.equal(wakes.length, 1, 'kept inbox must be woken so the queued user message runs');
+  assert.equal(wakes[0].wakeup, true);
 });
 
 test('session-start search uses the workspace name instead of the raw path', () => {
