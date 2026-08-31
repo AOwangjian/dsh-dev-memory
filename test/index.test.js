@@ -101,7 +101,7 @@ test('write-pass followup reports active until idle and stop cancels only that t
     id: 's1',
     inject() {},
     followup() { return true; },
-    cancel(cause) { cancels.push(cause); },
+    cancel(cause, options) { cancels.push({ cause, options }); },
     session: { id: 's1', header: { cwd: 'C:\\ws' } },
   };
   const status = () => handlers.get(contract.EVENTS.AGENT_STATUS) || [];
@@ -133,7 +133,8 @@ test('write-pass followup reports active until idle and stop cancels only that t
   assert.equal(stopped.ok, true);
   assert.equal(stopped.session.writePass.active, false);
   assert.equal(cancels.length, 1);
-  assert.equal(cancels[0].kind, 'user');
+  assert.equal(cancels[0].cause.kind, 'user');
+  assert.equal(cancels[0].options && cancels[0].options.keepInbox, true);
   for (const h of status()) h({ agent, status: 'idle' });
   assert.equal((await getWrite()).writePass.active, false);
 });
@@ -151,7 +152,7 @@ test('queued user message preempts an active write-pass without stopping plugin 
     id: 's1',
     inject() {},
     followup() { return true; },
-    cancel(cause) { cancels.push(cause); },
+    cancel(cause, options) { cancels.push({ cause, options }); },
     session: { id: 's1', header: { cwd: 'C:\\ws' } },
   };
   const status = () => handlers.get(contract.EVENTS.AGENT_STATUS) || [];
@@ -174,7 +175,8 @@ test('queued user message preempts an active write-pass without stopping plugin 
   assert.equal((await getWrite()).writePass.active, true);
   for (const h of inbox()) h({ agent, message: { source: { kind: 'user' } } });
   assert.equal(cancels.length, 1);
-  assert.equal(cancels[0].kind, 'user');
+  assert.equal(cancels[0].cause.kind, 'user');
+  assert.equal(cancels[0].options && cancels[0].options.keepInbox, true, 'queued user message must survive cancel');
   assert.equal((await getWrite()).writePass.active, false);
 });
 

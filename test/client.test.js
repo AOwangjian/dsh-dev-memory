@@ -107,9 +107,9 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.match(src, /新对话默认/);
   assert.match(src, /\/dsh-dev-memory\/session-auto-write/);
   assert.match(src, /sessionId/);
-  assert.match(src, /conversation\.session\.header\.actions/);
   assert.match(src, /正在写入记忆/);
   assert.match(src, /stopWritePass/);
+  assert.doesNotMatch(src, /conversation\.session\.header\.actions/);
   assert.doesNotMatch(src, /conversation\.input\.dock/);
   assert.doesNotMatch(src, /^\s*import\s/m);
   assert.doesNotMatch(src, /^\s*export\s/m);
@@ -315,14 +315,14 @@ test('registers a compact auto-write toggle on conversation.input.left', () => {
   assert.match(text, /自动记忆/);
 });
 
-test('registers a compact write-pass control on the conversation header', () => {
+test('registers a compact write-pass control beside the composer auto-memory toggle', () => {
   const plugin = materialize();
   const { ctx, registrations } = makeCtx();
   plugin.apply(ctx);
-  const header = registrations.find((row) => row.options.name === 'conversation.session.header.actions');
-  assert.ok(header, 'session header must host the write-pass status');
-  assert.equal(header.options.id, 'dev-memory-write-pass');
-  const tree = header.component();
+  const chips = registrations.filter((row) => row.options.name === 'conversation.input.left');
+  const writePass = chips.find((row) => row.options.id === 'dev-memory-write-pass');
+  assert.ok(writePass, 'composer tool row must host the compact write-pass chip');
+  const tree = writePass.component();
   assert.equal(tree, null);
 });
 
