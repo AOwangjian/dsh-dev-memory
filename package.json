@@ -1,6 +1,6 @@
 {
   "name": "dsh-dev-memory",
-  "version": "0.4.15",
+  "version": "0.4.16",
   "description": "Lightweight project memory library for DeepSeek Harness: markdown files, three tools, session-start retrieval. No Claude Code or extra skill required.",
   "keywords": [
     "dsh",

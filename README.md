@@ -64,7 +64,7 @@ dsh plugin --profile <name> add dsh-dev-memory
 | `writeConfidenceMin` | `'medium'` | 写入最低置信度 |
 | `autoWrite` | `true` | 新对话是否自动催写。关掉后仍会在会话开始检索，三个工具仍可用 |
 
-设置页开关作用于**新对话**。输入栏「自动记忆」只覆盖**当前对话**。
+设置页「新对话默认」写入 `~/.dsh/dev-memory/config.json`，重启后仍有效。输入栏「自动记忆」只覆盖**当前对话**（`session-auto-write.json`）。
 
 ## 工具
 
@@ -146,7 +146,7 @@ If `~/.claude/projects/<slug>/memory` already exists, that library is reused. Ov
 | `writeConfidenceMin` | `'medium'` | Minimum write confidence |
 | `autoWrite` | `true` | Auto write-pass for **new** conversations |
 
-The settings toggle is the default for new chats. The composer control overrides the current session only.
+The settings “new conversation default” is stored in `~/.dsh/dev-memory/config.json` and survives restart. The composer control overrides the current session only.
 
 ## License
 

@@ -452,7 +452,9 @@ test('child session inherits parent autoWrite override', (t) => {
   assert.equal(followups.length, 0);
 });
 
-test('POST autoWrite unmounts and remounts the write-pass section', async () => {
+test('POST autoWrite unmounts and remounts the write-pass section', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-aw-section-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   const { ctx, sections } = makeCtx();
   let live = 0;
   ctx.get = ((orig) => (key) => {
@@ -472,7 +474,7 @@ test('POST autoWrite unmounts and remounts the write-pass section', async () => 
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx);
+  plugin.apply(ctx, { pluginConfigPath: join(root, 'config.json') });
   assert.equal(live, 1);
   const route = routes.find((r) => r.path === '/dsh-dev-memory/config');
   const post = async (body) => {
@@ -491,6 +493,33 @@ test('POST autoWrite unmounts and remounts the write-pass section', async () => 
   const on = await post({ autoWrite: true });
   assert.equal(on.config.autoWrite, true);
   assert.equal(live, 1);
+});
+
+test('POST autoWrite persists the new-conversation default across apply', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-plugin-cfg-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const pluginConfigPath = join(root, 'config.json');
+  const first = makeCtx();
+  const routes = [];
+  first.ctx.inject = (_deps, fn) => fn({
+    effect: (cb) => cb(),
+    webServer: { register(def) { routes.push(def); return () => {}; } },
+  });
+  plugin.apply(first.ctx, { pluginConfigPath, autoWrite: true });
+  const route = routes.find((r) => r.path === '/dsh-dev-memory/config');
+  let out = '';
+  await route.handler({
+    method: 'POST',
+    headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270' },
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ autoWrite: false })); },
+  }, { writeHead() {}, end(chunk = '') { out += chunk; } });
+  assert.equal(JSON.parse(out).config.autoWrite, false);
+  const stored = JSON.parse(readFileSync(pluginConfigPath, 'utf8'));
+  assert.equal(stored.autoWrite, false);
+
+  const second = makeCtx();
+  plugin.apply(second.ctx, { pluginConfigPath, autoWrite: true });
+  assert.equal(second.sections.length, 0, 'persisted autoWrite false must skip the write-pass section on next apply');
 });
 
 test('auto mode waits for a live session cwd instead of using host or registry cwd', () => {
