@@ -7,6 +7,12 @@ import { join } from 'node:path';
 import { contract } from '../lib/contract.js';
 
 const plugin = await import('../lib/index.js');
+const isolatedPluginConfigPath = join(mkdtempSync(join(tmpdir(), 'dsh-iso-cfg-')), 'config.json');
+
+function applyPlugin(ctx, extra = {}) {
+  const config = { pluginConfigPath: isolatedPluginConfigPath, ...extra };
+  return plugin.apply(ctx, config);
+}
 
 function makeCtx() {
   const registered = [];
@@ -85,7 +91,7 @@ test('the package ships the four runtime scripts next to lib', () => {
 
 test('apply registers 3 tools via ctx.tools.register and the write-pass section', () => {
   const { ctx, registered, sections } = makeCtx();
-  assert.doesNotThrow(() => plugin.apply(ctx));
+  assert.doesNotThrow(() => applyPlugin(ctx));
 
   assert.deepEqual(registered.map((d) => d.name).sort(), ['memory_health', 'memory_search', 'memory_write']);
   for (const d of registered) {
@@ -99,11 +105,13 @@ test('apply registers 3 tools via ctx.tools.register and the write-pass section'
   assert.equal(sections[0].name, 'dev-memory:write-pass');
   assert.equal(typeof sections[0].order, 'number');
   assert.equal(typeof sections[0].text, 'string');
+  assert.match(sections[0].text, /update an existing memory file/i);
+  assert.match(sections[0].text, /do not create a new sibling/i);
 });
 
 test('hooks the 3 mapped events', () => {
   const { ctx, handlers } = makeCtx();
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   assert.ok(handlers.has(contract.EVENTS.AGENT_SESSION_START));
   assert.ok(handlers.has(contract.EVENTS.GOAL_CHANGED));
   assert.ok(handlers.has(contract.EVENTS.SESSION_DISPOSED));
@@ -113,7 +121,7 @@ test('hooks the 3 mapped events', () => {
 
 test('idle status followups a write-pass once and does not loop after that turn', () => {
   const { ctx, handlers } = makeCtx();
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   const followups = [];
   const agent = {
     id: 's1',
@@ -141,7 +149,7 @@ test('write-pass followup reports active until idle and stop cancels only that t
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   const cancels = [];
   const agent = {
     id: 's1',
@@ -192,7 +200,7 @@ test('queued user message preempts an active write-pass without stopping plugin 
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   const cancels = [];
   const wakes = [];
   const queued = { id: 'user-1', source: { kind: 'user' } };
@@ -253,7 +261,7 @@ test('session-start search uses the workspace name instead of the raw path', () 
 
 test('goal/changed injects a reminder only on operation === complete', () => {
   const { ctx, handlers } = makeCtx();
-  plugin.apply(ctx);
+  applyPlugin(ctx);
 
   const injected = [];
   const agent = { id: 's1', inject: (m) => injected.push(m) };
@@ -270,7 +278,7 @@ test('goal/changed injects a reminder only on operation === complete', () => {
 
 test('apply does not throw when every service is absent', () => {
   const ctx = { config: {}, get() { return undefined; }, on() { return () => {}; } };
-  assert.doesNotThrow(() => plugin.apply(ctx));
+  assert.doesNotThrow(() => applyPlugin(ctx));
 });
 
 test('apply swallows service failures and reports them on the panel snapshot', () => {
@@ -289,7 +297,7 @@ test('apply swallows service failures and reports them on the panel snapshot', (
       });
     },
   };
-  assert.doesNotThrow(() => plugin.apply(ctx));
+  assert.doesNotThrow(() => applyPlugin(ctx));
   const stateRoute = routes.find((r) => r.path === '/dsh-dev-memory/state');
   assert.ok(stateRoute, 'HTTP panel routes must still mount after a service failure');
   let body = '';
@@ -300,7 +308,7 @@ test('apply swallows service failures and reports them on the panel snapshot', (
 
 test('memory_search validates its args before dispatch', async () => {
   const { ctx, registered } = makeCtx();
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   const search = registered.find((d) => d.name === 'memory_search');
   await assert.rejects(search.execute({}), /memory_search\.query/);
   await assert.rejects(search.execute({ query: '' }), /memory_search\.query/);
@@ -311,7 +319,7 @@ test('memory_search validates its args before dispatch', async () => {
 
 test('memory_write validates proposal before dispatch', async () => {
   const { ctx, registered } = makeCtx();
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   const write = registered.find((d) => d.name === 'memory_write');
   await assert.rejects(write.execute({}), /memory_write\.proposal/);
   await assert.rejects(write.execute({ proposal: null }), /memory_write\.proposal/);
@@ -324,7 +332,7 @@ test('memory_write validates proposal before dispatch', async () => {
 
 test('memory_write rejects missing or bogus confidence', async () => {
   const { ctx, registered } = makeCtx();
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   const write = registered.find((d) => d.name === 'memory_write');
   const base = { module: 'm', category: 'fact', evidence: ['e'], draft: { relPath: 'a.md', content: '# x' } };
   await assert.rejects(write.execute({ proposal: { ...base } }), /memory_write\.proposal\.confidence/);
@@ -334,7 +342,7 @@ test('memory_write rejects missing or bogus confidence', async () => {
 
 test('autoWrite false skips write-pass section, goal reminder, and idle followup', () => {
   const { ctx, handlers, sections } = makeCtx();
-  plugin.apply(ctx, { autoWrite: false });
+  applyPlugin(ctx, { autoWrite: false });
   assert.equal(sections.length, 0, 'write-pass systemPrompt section skipped when autoWrite is off');
 
   const injected = [];
@@ -363,7 +371,7 @@ test('autoWrite false still injects memory at session start when search hits', (
   writeFileSync(join(scriptsDir, 'health-check.mjs'), 'process.stdout.write("{}");\n');
   writeFileSync(join(scriptsDir, 'utils.mjs'), 'export {};\n');
   const { ctx, handlers } = makeCtx();
-  plugin.apply(ctx, { autoWrite: false, scriptsDir, memoryRoot: scriptsDir });
+  applyPlugin(ctx, { autoWrite: false, scriptsDir, memoryRoot: scriptsDir });
   const injected = [];
   const agent = {
     id: 's1',
@@ -384,7 +392,7 @@ test('session autoWrite override skips idle followup for that session only', (t)
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx, {
+  applyPlugin(ctx, {
     autoWrite: true,
     sessionAutoWritePath: join(root, 'session-auto-write.json'),
     registryPath: join(root, 'workspaces.json'),
@@ -434,7 +442,7 @@ test('child session inherits parent autoWrite override', (t) => {
     sessions: { 'parent-1': { autoWrite: false } },
   }));
   const { ctx, handlers } = makeCtx();
-  plugin.apply(ctx, {
+  applyPlugin(ctx, {
     autoWrite: true,
     sessionAutoWritePath: join(root, 'session-auto-write.json'),
     registryPath: join(root, 'workspaces.json'),
@@ -474,7 +482,7 @@ test('POST autoWrite unmounts and remounts the write-pass section', async (t) =>
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx, { pluginConfigPath: join(root, 'config.json') });
+  applyPlugin(ctx, { pluginConfigPath: join(root, 'config.json') });
   assert.equal(live, 1);
   const route = routes.find((r) => r.path === '/dsh-dev-memory/config');
   const post = async (body) => {
@@ -529,7 +537,7 @@ test('auto mode waits for a live session cwd instead of using host or registry c
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   const stateRoute = routes.find((r) => r.path === '/dsh-dev-memory/state');
   let body = '';
   stateRoute.handler({ method: 'GET', headers: {} }, { writeHead() {}, end(chunk = '') { body += chunk; } });
@@ -577,7 +585,7 @@ test('session cwd becomes the A-convention memoryRoot used by the panel', () => 
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx);
+  applyPlugin(ctx);
 
   const agent = {
     id: 's1',
@@ -605,7 +613,7 @@ test('empty memoryRoot override switches configured root back to automatic sessi
     effect: (cb) => cb(),
     webServer: { register(def) { routes.push(def); return () => {}; } },
   });
-  plugin.apply(ctx, { memoryRoot: 'C:\\fixed\\memory' });
+  applyPlugin(ctx, { memoryRoot: 'C:\\fixed\\memory' });
   const agent = { id: 's1', session: { id: 's1', header: { cwd: 'D:\\bydk\\F20_Client\\Fish20' } }, inject() {} };
   for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
 
@@ -625,7 +633,7 @@ test('empty memoryRoot override switches configured root back to automatic sessi
 
 test('apply still registers tools when autoWrite is false', () => {
   const { ctx, registered } = makeCtx();
-  plugin.apply(ctx, { autoWrite: false });
+  applyPlugin(ctx, { autoWrite: false });
   assert.deepEqual(registered.map((d) => d.name).sort(), ['memory_health', 'memory_search', 'memory_write']);
 });
 
@@ -645,7 +653,7 @@ test('ctx.inject(["webServer"]) mounts state and config routes', () => {
       },
     });
   };
-  plugin.apply(ctx);
+  applyPlugin(ctx);
   assert.deepEqual(injected, ['webServer']);
   assert.deepEqual(routes.map((r) => r.path).sort(), ['/dsh-dev-memory/config', '/dsh-dev-memory/open', '/dsh-dev-memory/session-auto-write', '/dsh-dev-memory/state', '/dsh-dev-memory/workspaces']);
 });
@@ -662,7 +670,7 @@ function isolatedApply(t, extra = {}) {
   const registryPath = join(root, 'workspaces.json');
   const projectsRoot = join(root, 'projects');
   mkdirSync(projectsRoot, { recursive: true });
-  plugin.apply(ctx, { registryPath, projectsRoot, profile: 'web', scriptsDir: join(root, 'scripts'), ...extra });
+  applyPlugin(ctx, { registryPath, projectsRoot, profile: 'web', scriptsDir: join(root, 'scripts'), ...extra });
   const byPath = Object.fromEntries(routes.map((r) => [r.path, r]));
   return { root, ctx, registered, handlers, byPath, registryPath, projectsRoot };
 }
