@@ -279,6 +279,13 @@ test('memory tool cards parse search, write, and health blocks', async () => {
   assert.equal(search.count, 2);
   assert.equal(JSON.stringify(search.files), JSON.stringify(['a.md', 'b.md']));
   assert.equal(search.memoryRoot, 'C:\\mem');
+  const objectOutput = api.memoryToolCardModel('memory_search', {
+    kind: 'result',
+    call: { argsRaw: JSON.stringify({ query: '网络重试策略 UI 动画规范', top: 5 }) },
+    output: { query: '网络重试策略 UI 动画规范', results: [{ file: 'system/ui-eff-loader-manager.md' }], decision: { gated: true, candidateCount: 5, kept: 1, fallback: false } },
+  });
+  assert.equal(objectOutput.count, 1);
+  assert.deepEqual(objectOutput.files, ['system/ui-eff-loader-manager.md']);
   const write = api.memoryToolCardModel('memory_write', {
     kind: 'result',
     call: { argsRaw: JSON.stringify({ proposal: { module: 'fishing/core', category: 'fact', confidence: 'high', evidence: ['src'], draft: { relPath: 'fishing/core.md' } } }) },
