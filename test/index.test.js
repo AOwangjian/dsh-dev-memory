@@ -113,6 +113,20 @@ test('apply registers 3 tools via ctx.tools.register and the write-pass section'
   assert.match(sections[0].text, /do not create a new sibling/i);
 });
 
+test('memory_health renders a compact markdown health table instead of raw JSON', () => {
+  const { ctx, registered } = makeCtx();
+  applyPlugin(ctx);
+  const health = registered.find((tool) => tool.name === 'memory_health');
+  const rendered = health.output.render(undefined, {
+    summary: { markdownFiles: 107, directories: 24, readmes: 16, severityCounts: { high: 8, medium: 23, low: 135 } },
+    issues: { missingMeta: ['a.md'] },
+    decision: { gated: true, needsAttention: 0.61 },
+  });
+  assert.match(rendered[0].text, /\| 指标 \| 数值 \|/);
+  assert.match(rendered[0].text, /needsAttention/);
+  assert.match(rendered[0].text, /missingMeta/);
+});
+
 test('jev enabled registers a decision policy without changing memory tools or the write-pass policy', () => {
   const { ctx, registered, sections } = makeCtx();
   applyPlugin(ctx, { jev: { enabled: true } });
