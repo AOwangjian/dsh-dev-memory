@@ -10,3 +10,9 @@
         writeConfidenceMin: 'medium'
         enabled: true
         autoWrite: true
+        jev:
+          enabled: false
+          policyInjection:
+            enabled: true
+          apiKeyEnv: TYPESAFE_API_KEY
+          model: jev-latest

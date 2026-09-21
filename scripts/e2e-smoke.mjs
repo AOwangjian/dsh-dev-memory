@@ -3,7 +3,7 @@
 // Automates Phases 1-3:
 //   1. load sanity: node --check lib/{index,client}.js + ESM import of the host plugin
 //   2. profile composition: dsh --profile <name> --dump-config must show the
-//      dev-memory row with memoryRoot/scriptsDir/maxInjectTokens/autoWriteLevels/writeConfidenceMin
+//      dev-memory row with memoryRoot/scriptsDir/maxInjectTokens/autoWriteLevels/writeConfidenceMin/jev
 //   3. functional: real dev-memory scripts against a fresh temp memory root —
 //      service.search / service.write (+index-sync) / service.health, then the
 //      full write-pass (runWritePass) and the audit file it must append.
@@ -15,13 +15,13 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = resolve(process.env.DSH_DEV_MEMORY_REPO ?? dirname(dirname(fileURLToPath(import.meta.url))));
 const profile = process.env.DSH_DEV_MEMORY_PROFILE ?? 'devmemory-test';
-const scriptsDir = process.env.DSH_DEV_MEMORY_SCRIPTS ?? join(homedir(), '.dsh', 'skills', 'dev-memory', 'scripts');
+const scriptsDir = process.env.DSH_DEV_MEMORY_SCRIPTS ?? join(repoRoot, 'scripts');
 const dshBin = process.env.DSH_BIN ?? 'dsh';
 
 let failures = 0;
@@ -56,7 +56,7 @@ section(`Phase 2 — profile composition (${profile})`);
   } else {
     const hasRow = /^\s*-\s*id:\s*dev-memory\s*$/m.test(r.stdout) || /id:\s*dev-memory/.test(r.stdout);
     hasRow ? ok('dev-memory row present') : fail('dev-memory row present', 'id: dev-memory not found in dump');
-    for (const key of ['memoryRoot', 'scriptsDir', 'maxInjectTokens', 'autoWriteLevels', 'writeConfidenceMin']) {
+    for (const key of ['memoryRoot', 'scriptsDir', 'maxInjectTokens', 'autoWriteLevels', 'writeConfidenceMin', 'jev']) {
       new RegExp(`\\b${key}:`).test(r.stdout) ? ok(`config key ${key}`) : fail(`config key ${key}`, 'missing from dump');
     }
   }

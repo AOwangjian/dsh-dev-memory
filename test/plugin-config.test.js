@@ -28,6 +28,18 @@ test('set writes autoWrite and a new store reads it back', (t) => {
   assert.equal(makePluginConfigStore({ path }).read(true).autoWrite, false);
 });
 
+test('set persists Jev settings without accepting a secret value', (t) => {
+  const { path, store } = fixture(t);
+  const saved = store.set({
+    jev: { enabled: true, policyInjectionEnabled: false, apiKeyEnv: 'TYPESAFE_API_KEY', model: 'jev-1.13.0' },
+  });
+  assert.deepEqual(saved.jev, { enabled: true, policyInjectionEnabled: false, apiKeyEnv: 'TYPESAFE_API_KEY', model: 'jev-1.13.0' });
+  const stored = JSON.parse(readFileSync(path, 'utf8'));
+  assert.deepEqual(stored.jev, saved.jev);
+  assert.equal(JSON.stringify(stored).includes('apikey_'), false);
+  assert.deepEqual(makePluginConfigStore({ path }).read(false).jev, saved.jev);
+});
+
 test('corrupt file falls back to the boot default', (t) => {
   const { path } = fixture(t);
   writeFileSync(path, '{not json');

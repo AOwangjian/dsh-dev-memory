@@ -104,6 +104,10 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.match(src, /autoWrite/);
   assert.match(src, /自动记忆/);
   assert.match(src, /自动更新/);
+  assert.match(src, /Jev 决策/);
+  assert.match(src, /type:'password'/);
+  assert.match(src, /apiKey/);
+  assert.match(src, /credential/);
   assert.match(src, /新对话默认/);
   assert.match(src, /\/dsh-dev-memory\/session-auto-write/);
   assert.match(src, /sessionId/);
@@ -420,12 +424,11 @@ test('registers memory toolviews and a turn-tail selector for successful writes'
   plugin.apply(ctx);
   const keys = registrations.map((row) => row.options.key).filter(Boolean);
   assert.deepEqual(keys.filter((k) => String(k).startsWith('memory_')).sort(), ['memory_health', 'memory_search', 'memory_write']);
-  assert.equal(events.length, 1);
-  assert.equal(events[0].kind, 'dev-memory-writes');
-  const tail = registrations.find((row) => row.options.name === 'conversation.chat.turnTail');
-  assert.ok(tail);
-  assert.equal(typeof tail.options.select, 'function');
-  assert.equal(tail.options.select({ turn: { data: { get: () => ({ writes: [] }) } }, seq: 9 }), null);
+  assert.deepEqual(events.map((event) => event.kind).sort(), ['dev-memory-writes', 'jev-usage']);
+  const tails = registrations.filter((row) => row.options.name === 'conversation.chat.turnTail');
+  assert.equal(tails.length, 2);
+  assert.equal(typeof tails[0].options.select, 'function');
+  assert.equal(tails[0].options.select({ turn: { data: { get: () => ({ writes: [] }) } }, seq: 9 }), null);
 });
 
 test('turn accumulator keeps successful create/update writes and ignores search or errors', async () => {
@@ -441,4 +444,20 @@ test('turn accumulator keeps successful create/update writes and ignores search 
   assert.equal(selected.length, 1);
   assert.equal(selected[0].action, 'create');
   assert.equal(selected[0].relPath, 'a.md');
+});
+
+test('Jev turn accumulator reports calls, outcomes, latency, and latest confidence', async () => {
+  const api = await loadClientExports();
+  const def = api.jevUsageEventDefinition;
+  let state = def.start({}, { event: { type: 'turn/start', data: { turn: 7 } } });
+  state = def.update({ state }, { event: { type: 'tool/call', data: { turn: 7, callId: 'j1', name: 'jev_decide' } } });
+  state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 7, message: { source: { callId: 'j1' }, content: [{ isError: false, text: JSON.stringify({ ok: true, telemetry: { latencyMs: 80, confidence: { action: 0.92 } } }) }] } }, seq: 3 } });
+  state = def.update({ state }, { event: { type: 'tool/call', data: { turn: 7, callId: 'j2', name: 'jev_decide' } } });
+  state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 7, message: { source: { callId: 'j2' }, content: [{ isError: false, text: JSON.stringify({ ok: false, telemetry: { latencyMs: 40, errorCategory: 'rate_limit' } }) }] } }, seq: 5 } });
+  const usage = api.selectJevUsage({ turn: { data: { get: () => state } }, seq: 9 });
+  assert.equal(usage.calls, 2);
+  assert.equal(usage.success, 1);
+  assert.equal(usage.failure, 1);
+  assert.equal(usage.averageLatencyMs, 60);
+  assert.equal(usage.latestConfidence, 0.92);
 });

@@ -62,24 +62,28 @@ test('resolveScriptsDir prefers a configured directory that has the three script
   }), configured);
 });
 
-test('resolveScriptsDir uses the local skill when config is empty', () => {
+test('resolveScriptsDir ignores a local skill directory and uses bundled scripts when config is empty', () => {
   const skill = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-skill-')));
   const bundled = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-bundled-')));
   assert.equal(plugin.resolveScriptsDir({
     configured: '',
     skillDir: skill,
     bundledDir: bundled,
-  }), skill);
+  }), bundled);
 });
 
-test('resolveScriptsDir falls back to bundled scripts when the skill is missing', () => {
+test('resolveScriptsDir falls back to bundled scripts when the configured override is invalid', () => {
   const bundled = writeScripts(mkdtempSync(join(tmpdir(), 'dsh-scripts-bundled-')));
   const missing = join(tmpdir(), 'dsh-scripts-missing-' + Date.now());
   assert.equal(plugin.resolveScriptsDir({
-    configured: '',
-    skillDir: missing,
+    configured: missing,
     bundledDir: bundled,
   }), bundled);
+});
+
+test('resolveScriptsDir keeps a missing bundled path as the runtime failure source', () => {
+  const missing = join(tmpdir(), 'dsh-scripts-missing-bundled-' + Date.now());
+  assert.equal(plugin.resolveScriptsDir({ configured: '', bundledDir: missing }), missing);
 });
 
 test('the package ships the four runtime scripts next to lib', () => {
@@ -107,6 +111,33 @@ test('apply registers 3 tools via ctx.tools.register and the write-pass section'
   assert.equal(typeof sections[0].text, 'string');
   assert.match(sections[0].text, /update an existing memory file/i);
   assert.match(sections[0].text, /do not create a new sibling/i);
+});
+
+test('jev enabled registers a decision policy without changing memory tools or the write-pass policy', () => {
+  const { ctx, registered, sections } = makeCtx();
+  applyPlugin(ctx, { jev: { enabled: true } });
+
+  assert.deepEqual(registered.map((d) => d.name).sort(), ['jev_decide', 'memory_health', 'memory_search', 'memory_write']);
+  assert.ok(sections.some((section) => section.name === 'dev-memory:write-pass'));
+  const policy = sections.find((section) => section.name === 'dev-memory:decision-policy');
+  assert.ok(policy);
+  assert.equal(policy.order, 117);
+  assert.match(policy.text, /predefined choices/i);
+  assert.match(policy.text, /Do not use.*code/i);
+  assert.ok(registered.some((tool) => tool.name === 'jev_decide'));
+});
+
+test('jev policy injection can be disabled independently', () => {
+  const { ctx, sections } = makeCtx();
+  applyPlugin(ctx, { jev: { enabled: true, policyInjection: { enabled: false } } });
+  assert.equal(sections.some((section) => section.name === 'dev-memory:decision-policy'), false);
+});
+
+test('jev disabled preserves the original memory-only tool surface', () => {
+  const { ctx, registered, sections } = makeCtx();
+  applyPlugin(ctx, { jev: { enabled: false } });
+  assert.deepEqual(registered.map((definition) => definition.name).sort(), ['memory_health', 'memory_search', 'memory_write']);
+  assert.equal(sections.some((section) => section.name === 'dev-memory:decision-policy'), false);
 });
 
 test('hooks the 3 mapped events', () => {
@@ -530,6 +561,47 @@ test('POST autoWrite persists the new-conversation default across apply', async 
   assert.equal(second.sections.length, 0, 'persisted autoWrite false must skip the write-pass section on next apply');
 });
 
+test('POST Jev settings persist non-secret config and save the key through DSH credentials', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-jev-settings-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const { ctx, registered, sections } = makeCtx();
+  const routes = [];
+  const keys = new Map();
+  const originalGet = ctx.get.bind(ctx);
+  ctx.get = (key) => {
+    if (key === 'credentials') {
+      return {
+        async resolve(ref) { return keys.has(ref) ? { value: keys.get(ref), source: 'stored' } : undefined; },
+        async describe(ref) { return { configured: keys.has(ref), source: keys.has(ref) ? 'stored' : undefined, writable: true }; },
+        async set(ref, value) { keys.set(ref, value); },
+        async unset(ref) { keys.delete(ref); },
+      };
+    }
+    return originalGet(key);
+  };
+  ctx.inject = (_deps, fn) => fn({ effect: (cb) => cb(), webServer: { register(def) { routes.push(def); return () => {}; } } });
+  const configPath = join(root, 'config.json');
+  plugin.apply(ctx, { pluginConfigPath: configPath });
+  const route = routes.find((item) => item.path === '/dsh-dev-memory/config');
+  let body = '';
+  await route.handler({
+    method: 'POST',
+    headers: { origin: 'http://127.0.0.1:5270', host: '127.0.0.1:5270' },
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.from(JSON.stringify({ jev: { enabled: true, policyInjectionEnabled: false, model: 'jev-1.13.0', apiKey: 'test-secret' } }));
+    },
+  }, { writeHead() {}, end(chunk = '') { body += chunk; } });
+  const config = JSON.parse(body).config;
+  assert.equal(config.jev.enabled, true);
+  assert.equal(config.jev.policyInjectionEnabled, false);
+  assert.equal(config.jev.model, 'jev-1.13.0');
+  assert.equal(config.jev.credential.configured, true);
+  assert.equal(keys.get('TYPESAFE_API_KEY'), 'test-secret');
+  assert.equal(readFileSync(configPath, 'utf8').includes('test-secret'), false);
+  assert.ok(registered.some((tool) => tool.name === 'jev_decide'));
+  assert.equal(sections.some((section) => section.name === 'dev-memory:decision-policy'), false);
+});
+
 test('auto mode waits for a live session cwd instead of using host or registry cwd', () => {
   const { ctx } = makeCtx();
   const routes = [];
@@ -753,6 +825,30 @@ test('memory tools enrich results with workspace metadata and mark lastWriteAt o
   assert.equal(typeof after, 'number');
   const healthy = await health.execute({}, { agent });
   assert.equal(healthy.workspace.id, 'D--bydk-F20-Client-Fish20');
+});
+
+test('Jev writes privacy-safe telemetry to a separate audit log when unavailable', async (t) => {
+  const memoryRoot = mkdtempSync(join(tmpdir(), 'dsh-jev-audit-'));
+  t.after(() => rmSync(memoryRoot, { recursive: true, force: true }));
+  const { registered } = isolatedApply(t, {
+    memoryRoot,
+    jev: { enabled: true, apiKeyEnv: 'DSH_DEV_MEMORY_TEST_MISSING_JEV_KEY' },
+  });
+  const tool = registered.find((definition) => definition.name === 'jev_decide');
+  const result = await tool.execute({
+    state: { secret: 'must-not-be-audited' },
+    questions: { retry: { type: 'noul', instructions: 'Should this be retried?' } },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.category, 'missing_api_key');
+
+  const event = JSON.parse(readFileSync(join(memoryRoot, '.audit', 'jev.jsonl'), 'utf8').trim());
+  assert.equal(event.event, 'jev_tool_called');
+  assert.deepEqual(event.decisionTypes, ['noul']);
+  assert.equal(event.success, false);
+  assert.equal(event.errorCategory, 'missing_api_key');
+  assert.equal('state' in event, false);
+  assert.equal('questions' in event, false);
 });
 
 test('adding a workspace requires an existing directory', async (t) => {

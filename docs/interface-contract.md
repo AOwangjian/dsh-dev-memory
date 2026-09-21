@@ -117,6 +117,7 @@ cross-checked against each package's own `super(ctx, "<key>")` and `lib/types`.
 | `WORKSPACE_REGISTRY` | `workspaceRegistry` | `dsh-workspace` | `create`, `get`, `list`, `delete`, `resolveByPath` |
 | `SKILLS` | `skills` | `dsh-skill` | `registerProvider`, `register`, `list`, `snapshot`, `get` |
 | `SYSTEM_PROMPT` | `systemPrompt` | `dsh-system-prompt` | `section`, `context`, `tools`, `variable`, `assemble` |
+| `CREDENTIALS` | `credentials` | `dsh-credentials` | `resolve`, `describe`, `set`, `unset` |
 
 Key shapes (for the plugin's subprocess + workspace use):
 - `SubprocessSpawnSpec` — `dsh-subprocess/lib/types/types.d.ts` L67:
@@ -127,6 +128,13 @@ Key shapes (for the plugin's subprocess + workspace use):
   `{ id: WorkspaceId; path: string; title: string; createdAt: string; updatedAt: string; … }`.
   `path` is the `fs.realpath`-canonicalized directory; the slug is derived by
   replacing `:` and `\` with `-` (design spec §9).
+
+Credential discovery, from `dsh-credentials` README and `lib/types/index.d.ts`:
+
+- `resolve(ref)` returns `{ value, source } | undefined` for a request-time key lookup.
+- `describe(ref)` returns `{ configured, source?, writable }` and never exposes the key value.
+- `set(ref, value)` and `unset(ref)` persist or clear a writable reference. An inherited process-environment value is read-only and takes precedence.
+- `credentialRef()` is runtime string branding only; a static host plugin may pass the validated reference string through `ctx.get('credentials')` without importing `@deepseek-ai/*`.
 
 ---
 
@@ -332,9 +340,11 @@ The RPC direction is Client→Host: Host uses `harness.handle`, Client uses
 
 ---
 
-## 7. SCRIPTS (exact dev-memory CLI)
+## 7. SCRIPTS (bundled dev-memory CLI)
 
-Source: `C:\Users\wangjian\.dsh\skills\dev-memory\scripts\`.
+Source: this package's published `scripts/` directory. It is the default
+runtime source; `scriptsDir` is an explicit development/debug override only.
+The plugin never auto-discovers `~/.dsh/skills/dev-memory/scripts`.
 
 ### search-memory.mjs (read-only)
 ```
@@ -367,6 +377,30 @@ node memory-crud.mjs <validate|dup-check|index-sync> <memory-root> [file] [--jso
 node health-check.mjs <memory-root> [--json] [--help]
 ```
 Positional `<memory-root>` at argv[2]; `--json` for machine output.
+
+---
+
+## 8. TYPESAFE JEV (external structured-decision API)
+
+Source: [TypeSafe Quick Start](https://docs.typesafe.ai/introduction/quickstart)
+and [Primitives](https://docs.typesafe.ai/primitives), verified 2026-09-21.
+This is an external HTTP contract, not a DSH API.
+
+```
+POST https://api.typesafe.ai/v1/systemone
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+```
+
+The request body is `{ model, state, questions }`. Each named question has a
+`type` of `choice`, `score`, or `noul` and `instructions`; Choice and Score
+also require `criteria`. The response contains `{ model, answers, usage }`.
+Choice returns `choice`, `probabilities`, and `confidence`; Score returns
+`score`, `legend`, `probabilities`, and `confidence`; Noul returns `noul`.
+
+The plugin uses Node's built-in `fetch` through an injectable transport for
+tests. It does not add a TypeSafe SDK, an MCP client, or a second chat-model
+provider.
 
 ---
 

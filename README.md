@@ -63,8 +63,26 @@ dsh plugin --profile <name> add dsh-dev-memory
 | `maxInjectTokens` | `1500` | 会话开始注入的 token 预算 |
 | `writeConfidenceMin` | `'medium'` | 写入最低置信度 |
 | `autoWrite` | `true` | 新对话是否自动催写。关掉后仍会在会话开始检索，三个工具仍可用 |
+| `jev.enabled` | `false` | 开启 TypeSafe Jev 结构化决策工具与使用策略 |
+| `jev.apiKeyEnv` | `'TYPESAFE_API_KEY'` | Jev API Key 的 DSH credential 引用名 |
+| `jev.model` | `'jev-latest'` | Jev 模型名 |
 
 设置页「新对话默认」写入 `~/.dsh/dev-memory/config.json`，重启后仍有效。输入栏「自动记忆」只覆盖**当前对话**（`session-auto-write.json`）。
+
+### Jev 结构化决策（默认关闭）
+
+Jev 是可选的结构化决策能力，不是第二个聊天模型。开启后会注册 `jev_decide`，适合有限选项、分类、评分、二元/概率判断与重复的独立判断；代码生成、架构设计、开放式研究仍由主模型处理。
+
+```yaml
+jev:
+  enabled: true
+  policyInjection:
+    enabled: true
+  apiKeyEnv: TYPESAFE_API_KEY
+  model: jev-latest
+```
+
+可在插件设置页直接保存、轮换或清除 API Key：DSH credentials store 会保存实际值，普通插件配置只保存 `apiKeyEnv` 引用，页面永不回显密钥。也可由 DSH Host 环境变量提供同名 key；环境变量优先且会显示为只读。绝不要将 key 写进 `cordis.patch.yml` 或仓库。缺少 key、网络故障、限流或 API 异常时，`jev_decide` 返回可消费的 unavailable 结果，主模型可继续完成任务。
 
 ## 工具
 
@@ -73,6 +91,8 @@ dsh plugin --profile <name> add dsh-dev-memory
 **`memory_write`** — `proposal`：`module`、`category`、`confidence`、`evidence`（非空）、`draft.relPath` + `draft.content`。`changelog` 不落盘。
 
 **`memory_health`** — 无参数。
+
+启用 Jev 后，**`jev_decide`** 接收 `state` 和命名的 `choice`、`score`、`noul` questions，并返回 TypeSafe 的 typed answers。
 
 示例：[examples/tool-calls.md](examples/tool-calls.md)。
 
@@ -145,8 +165,26 @@ If `~/.claude/projects/<slug>/memory` already exists, that library is reused. Ov
 | `maxInjectTokens` | `1500` | Session-start inject budget |
 | `writeConfidenceMin` | `'medium'` | Minimum write confidence |
 | `autoWrite` | `true` | Auto write-pass for **new** conversations |
+| `jev.enabled` | `false` | Enable the TypeSafe Jev structured-decision tool and policy |
+| `jev.apiKeyEnv` | `'TYPESAFE_API_KEY'` | DSH credential reference for the Jev API key |
+| `jev.model` | `'jev-latest'` | Jev model name |
 
 The settings “new conversation default” is stored in `~/.dsh/dev-memory/config.json` and survives restart. The composer control overrides the current session only.
+
+### Jev structured decisions (off by default)
+
+Jev is an optional structured-decision capability, not a second chat model. When enabled it registers `jev_decide` for bounded choices, classification, scoring, binary/probabilistic judgement, and repeated independent decisions. The main model remains responsible for code generation, architecture, and open-ended research.
+
+```yaml
+jev:
+  enabled: true
+  policyInjection:
+    enabled: true
+  apiKeyEnv: TYPESAFE_API_KEY
+  model: jev-latest
+```
+
+Use the plugin settings panel to save, rotate, or clear the API key. DSH credentials stores the actual value while ordinary plugin config stores only the `apiKeyEnv` reference, and the UI never returns the value. A same-named DSH Host environment variable also works; it takes precedence and is shown as read-only. Never put a key in `cordis.patch.yml` or source control. Missing keys, network failures, rate limits, and API failures return a consumable unavailable result so the main model can continue.
 
 ## License
 
