@@ -25,6 +25,8 @@ test('jev_decide exposes a strict structured-decision schema and delegates to th
   assert.equal(result.telemetry.success, true);
   assert.deepEqual(result.telemetry.confidence, { retry: 0.91 });
   assert.equal(typeof result.telemetry.latencyMs, 'number');
+  assert.equal('errorCategory' in result.telemetry, false);
+  assert.doesNotThrow(() => JSON.stringify(result));
   assert.deepEqual(calls, [args]);
   assert.equal(observations.length, 1);
   assert.equal(observations[0].event, 'jev_tool_called');
@@ -32,6 +34,25 @@ test('jev_decide exposes a strict structured-decision schema and delegates to th
   assert.equal(observations[0].success, true);
   assert.deepEqual(observations[0].confidence, { retry: 0.91 });
   assert.equal(typeof observations[0].latencyMs, 'number');
+});
+
+test('jev_decide normalizes Choice candidate arrays and keeps unavailable output lossless JSON', async () => {
+  const calls = [];
+  const tool = makeJevTool({ service: { decide: async (args) => { calls.push(args); return { ok: false, error: { category: 'rate_limit', message: 'slow down' } }; } } });
+  const result = await tool.execute({
+    state: 'Login timed out three times and the network recovered.',
+    questions: { action: { type: 'choice', instructions: 'Choose the next action.', criteria: ['retry', 'abort', 'report'] } },
+  });
+  assert.deepEqual(calls[0].questions.action.criteria, {
+    retry: 'retry',
+    abort: 'abort',
+    report: 'report',
+  });
+  assert.equal(result.telemetry.errorCategory, 'rate_limit');
+  assert.doesNotThrow(() => JSON.stringify(result));
+  const schema = tool.parameters.properties.questions.additionalProperties;
+  assert.equal(schema.oneOf.length, 3);
+  assert.deepEqual(schema.oneOf[0].required, ['type', 'instructions', 'criteria']);
 });
 
 test('jev_decide rejects malformed structured-decision input before calling the service', async () => {
