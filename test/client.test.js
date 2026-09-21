@@ -286,6 +286,12 @@ test('memory tool cards parse search, write, and health blocks', async () => {
   });
   assert.equal(objectOutput.count, 1);
   assert.deepEqual(objectOutput.files, ['system/ui-eff-loader-manager.md']);
+  const wrappedOutput = api.memoryToolCardModel('memory_search', {
+    kind: 'tool-result',
+    call: { argsRaw: JSON.stringify({ query: '网络重试策略 UI 动画规范', top: 5 }) },
+    output: { result: { query: '网络重试策略 UI 动画规范', results: [{ file: 'system/ui-eff-loader-manager.md' }] } },
+  });
+  assert.equal(wrappedOutput.count, 1);
   const write = api.memoryToolCardModel('memory_write', {
     kind: 'result',
     call: { argsRaw: JSON.stringify({ proposal: { module: 'fishing/core', category: 'fact', confidence: 'high', evidence: ['src'], draft: { relPath: 'fishing/core.md' } } }) },
