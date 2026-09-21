@@ -7,11 +7,11 @@ test('retrieval gate keeps only candidates Jev marks relevant and fails open', a
   const service = { decide: async () => ({ ok: true, answers: { candidate_0: { noul: 0.93 }, candidate_1: { noul: 0.08 } } }) };
   const gated = await gateRetrieval({ service, query: 'network retry policy', hits });
   assert.deepEqual(gated.results, [{ file: 'network.md' }]);
-  assert.equal(gated.decision.gated, true);
+  assert.deepEqual(gated.decision, { gated: true, candidateCount: 2, kept: 1, fallback: false });
 
   const fallback = await gateRetrieval({ service: { decide: async () => ({ ok: false }) }, query: 'q', hits });
   assert.deepEqual(fallback.results, hits.results);
-  assert.equal(fallback.decision.gated, false);
+  assert.deepEqual(fallback.decision, { gated: false, candidateCount: 2, kept: 2, fallback: true });
 });
 
 test('write gate allows write by default on failure and honors an explicit skip', async () => {

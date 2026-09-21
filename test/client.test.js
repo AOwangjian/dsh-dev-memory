@@ -108,6 +108,9 @@ test('panel source fetches /dsh-dev-memory/state and posts /config', async () =>
   assert.match(src, /type:'password'/);
   assert.match(src, /apiKey/);
   assert.match(src, /credential/);
+  assert.match(src, /\/dsh-dev-memory\/jev\/test/);
+  assert.match(src, /测试连通性/);
+  assert.match(src, /Jev 筛选/);
   assert.match(src, /概览/);
   assert.match(src, /工作区/);
   assert.match(src, /activeTab/);

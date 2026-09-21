@@ -102,6 +102,7 @@ function mountWith(state) {
         autoWrite: snapshot.enabled,
       };
     },
+    testJevConnection: snapshot.testJevConnection,
   });
   const byPath = Object.fromEntries(webServer.routes.map((r) => [r.path, r]));
   return { webServer, snapshot, byPath };
@@ -153,6 +154,14 @@ test('POST /dsh-dev-memory/config prefers autoWrite over enabled', async () => {
   const json = JSON.parse(res.body);
   assert.equal(json.config.autoWrite, false);
   assert.equal(json.config.enabled, false);
+});
+
+test('POST /dsh-dev-memory/jev/test forwards to the supplied connectivity check', async () => {
+  const { byPath } = mountWith({ testJevConnection: async () => ({ ok: true, model: 'jev-test', latencyMs: 42 }) });
+  const res = mockRes();
+  await byPath['/dsh-dev-memory/jev/test'].handler(jsonReq('POST', {}, trustedHeaders()), res);
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(res.body), { ok: true, result: { ok: true, model: 'jev-test', latencyMs: 42 } });
 });
 
 test('POST /dsh-dev-memory/config rejects untrusted origin', async () => {
