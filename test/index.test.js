@@ -391,7 +391,7 @@ test('autoWrite false skips write-pass section, goal reminder, and idle followup
   assert.equal(followups.length, 0, 'idle followup skipped when autoWrite is off');
 });
 
-test('autoWrite false still injects memory at session start when search hits', (t) => {
+test('session start injects matching memory once per session even when the event repeats', (t) => {
   const scriptsDir = mkdtempSync(join(tmpdir(), 'dsh-auto-write-scripts-'));
   t.after(() => rmSync(scriptsDir, { recursive: true, force: true }));
   writeFileSync(join(scriptsDir, 'search-memory.mjs'), [
@@ -409,8 +409,10 @@ test('autoWrite false still injects memory at session start when search hits', (
     inject: (m) => injected.push(m),
     session: { id: 's1', header: { cwd: 'D:\\Projects\\dsh-dev-memory' } },
   };
-  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
-  assert.equal(injected.length, 1, 'session-start inject still runs when autoWrite is off');
+  for (let n = 0; n < 3; n++) {
+    for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
+  }
+  assert.equal(injected.length, 1, 'session-start injection must be deduplicated per session');
   assert.match(injected[0].content[0].text, /plugin\/overview\.md/);
 });
 
