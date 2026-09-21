@@ -424,9 +424,14 @@ test('session start injects matching memory once per session even when the event
     session: { id: 's1', header: { cwd: 'D:\\Projects\\dsh-dev-memory' } },
   };
   for (let n = 0; n < 3; n++) {
-    for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent });
+    for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent, source: 'startup' });
   }
   assert.equal(injected.length, 1, 'session-start injection must be deduplicated per session');
+  const resumed = { id: 's2', inject: (m) => injected.push(m), session: { id: 's2', header: { cwd: 'D:\\Projects\\dsh-dev-memory' } } };
+  const seeded = { id: 's3', inject: (m) => injected.push(m), session: { id: 's3', header: { cwd: 'D:\\Projects\\dsh-dev-memory', parentSession: 's1', isSeeded: true } } };
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent: resumed, source: 'resume' });
+  for (const h of handlers.get(contract.EVENTS.AGENT_SESSION_START)) h({ agent: seeded, source: 'startup' });
+  assert.equal(injected.length, 1, 'resume and seeded child sessions must not inject duplicate memory');
   assert.match(injected[0].content[0].text, /plugin\/overview\.md/);
 });
 
