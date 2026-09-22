@@ -332,6 +332,14 @@ test('memory tool cards parse search, write, and health blocks', async () => {
   });
   assert.equal(markdownHealth.summary, '107 个文件 · 8 高 / 23 中 / 135 低');
   assert.equal(markdownHealth.issueCount, 0);
+  const historicalSearch = api.memoryToolCardModel('memory_search', {
+    kind: 'tool-result',
+    call: { name: 'memory_search', argsRaw: JSON.stringify({ query: '网络重试策略 UI 动画规范', top: 5 }) },
+    content: [{ type: 'text', text: JSON.stringify({ query: '网络重试策略 UI 动画规范', results: [{ file: 'system/ui-eff-loader-manager.md' }], decision: { gated: true, candidateCount: 5, kept: 1, fallback: false } }) }],
+    isError: false,
+  });
+  assert.equal(historicalSearch.summary, '1 条命中');
+  assert.equal(JSON.stringify(historicalSearch.files), JSON.stringify(['system/ui-eff-loader-manager.md']));
   const zeroPlaceholder = api.memoryToolCardModel('memory_health', {
     kind: 'tool-result',
     content: [{ type: 'text', text: '| 类别 | 数量 |\n| --- | ---: |\n| 无 | 0 |' }],
