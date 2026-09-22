@@ -326,6 +326,17 @@ test('memory tool cards parse search, write, and health blocks', async () => {
   assert.equal(pendingHealth.summary, '检查中');
   const opaqueHealth = api.memoryToolCardModel('memory_health', { kind: 'tool-result' });
   assert.equal(opaqueHealth.summary, '结果见下方');
+  const markdownHealth = api.memoryToolCardModel('memory_health', {
+    kind: 'tool-result',
+    content: [{ type: 'text', text: '## 记忆健康检查\n\n| 指标 | 数值 |\n| --- | ---: |\n| Markdown 文件 | 107 |\n| 严重度（高/中/低） | 8/23/135 |\n| Jev needsAttention | 0.61 |\n\n### 问题分类\n\n| 类别 | 数量 |\n| --- | ---: |\n| 无 | 0 |' }],
+  });
+  assert.equal(markdownHealth.summary, '107 个文件 · 8 高 / 23 中 / 135 低');
+  assert.equal(markdownHealth.issueCount, 0);
+  const zeroPlaceholder = api.memoryToolCardModel('memory_health', {
+    kind: 'tool-result',
+    content: [{ type: 'text', text: '| 类别 | 数量 |\n| --- | ---: |\n| 无 | 0 |' }],
+  });
+  assert.equal(zeroPlaceholder.summary, '结果见下方');
   assert.equal(health.directories, 4);
   assert.equal(health.index, true);
   assert.equal(health.issueCount, 2);

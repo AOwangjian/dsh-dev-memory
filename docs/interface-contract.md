@@ -20,8 +20,10 @@ cards to display canonical health/search/write data even when model-facing
 content is a Markdown report. Nested calls and older JSON history use the
 native text-content fallback; metadata is not assumed present there.
 
-Missing data is not a zero count. Historical Markdown-only results without
-metadata cannot reconstruct all original structured fields.
+Missing data is not a zero count. A Markdown health report is parsed only
+from its labeled metric rows; arbitrary `| 0 |` table cells are not counts.
+Historical Markdown without those labels cannot reconstruct the structured
+fields and must stay unlabeled.
 
 > Task 1 (interface discovery) for the `dsh-dev-memory` plugin.
 > Branch: `feat/plugin`. This file is the source-of-truth evidence for every
