@@ -316,6 +316,14 @@ test('memory tool cards parse search, write, and health blocks', async () => {
   assert.equal(write.confidence, 'high');
   assert.equal(write.evidence, 'src');
   assert.equal(write.ts, 1);
+  const rejectedWrite = api.memoryToolCardModel('memory_write', {
+    kind: 'tool-result',
+    call: { argsRaw: JSON.stringify({ proposal: { module: 'plugin', category: 'fact', confidence: 'high', evidence: ['src'], draft: { relPath: 'plugin/overview.md' } } }) },
+    content: [{ type: 'text', text: JSON.stringify({ written: false, reason: 'Jev write gate chose skip' }) }],
+  });
+  assert.equal(rejectedWrite.title, '未写入项目记忆');
+  assert.equal(rejectedWrite.file, '');
+  assert.equal(rejectedWrite.summary, 'Jev write gate chose skip');
   const health = api.memoryToolCardModel('memory_health', {
     kind: 'result',
     output: JSON.stringify({ summary: { directories: 4, markdownFiles: 17, memoryIndexExists: true, severityCounts: { high: 2, medium: 2, low: 11 } }, issues: { brokenLinks: [1, 2] }, workspace: { name: 'Fish20' } }),
@@ -525,6 +533,11 @@ test('turn accumulator keeps successful create/update writes and ignores search 
   assert.equal(selected.length, 1);
   assert.equal(selected[0].action, 'create');
   assert.equal(selected[0].relPath, 'a.md');
+  state = def.update({ state }, { event: { type: 'tool/call', data: { turn: 3, callId: '3', name: 'memory_write' } } });
+  state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 3, message: { source: { callId: '3' }, content: [{ type: 'tool-result', isError: false, content: [{ type: 'text', text: JSON.stringify({ written: true, audit: { action: 'update', relPath: 'plugin/overview.md', summary: '更新' } }) }] }] } }, seq: 8 } });
+  const nested = api.selectMemoryWrites({ turn: { data: { get: () => state } }, seq: 9 });
+  assert.equal(nested.length, 2);
+  assert.equal(nested[1].relPath, 'plugin/overview.md');
 });
 
 test('Jev turn accumulator reports calls, outcomes, latency, and latest confidence', async () => {
@@ -535,10 +548,12 @@ test('Jev turn accumulator reports calls, outcomes, latency, and latest confiden
   state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 7, message: { source: { callId: 'j1' }, content: [{ isError: false, text: JSON.stringify({ ok: true, telemetry: { latencyMs: 80, confidence: { action: 0.92 } } }) }] } }, seq: 3 } });
   state = def.update({ state }, { event: { type: 'tool/call', data: { turn: 7, callId: 'j2', name: 'jev_decide' } } });
   state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 7, message: { source: { callId: 'j2' }, content: [{ isError: false, text: JSON.stringify({ ok: false, telemetry: { latencyMs: 40, errorCategory: 'rate_limit' } }) }] } }, seq: 5 } });
+  state = def.update({ state }, { event: { type: 'tool/call', data: { turn: 7, callId: 'j3', name: 'jev_decide' } } });
+  state = def.update({ state }, { event: { type: 'tool/result', data: { turn: 7, message: { source: { callId: 'j3' }, content: [{ type: 'tool-result', isError: false, content: [{ type: 'text', text: JSON.stringify({ ok: true, telemetry: { latencyMs: 20, confidence: { action: 0.7 } } }) }] }] } }, seq: 7 } });
   const usage = api.selectJevUsage({ turn: { data: { get: () => state } }, seq: 9 });
-  assert.equal(usage.calls, 2);
-  assert.equal(usage.success, 1);
+  assert.equal(usage.calls, 3);
+  assert.equal(usage.success, 2);
   assert.equal(usage.failure, 1);
-  assert.equal(usage.averageLatencyMs, 60);
-  assert.equal(usage.latestConfidence, 0.92);
+  assert.equal(usage.averageLatencyMs, 47);
+  assert.equal(usage.latestConfidence, 0.7);
 });

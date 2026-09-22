@@ -9,8 +9,10 @@ defines `ToolResultNode` (lines 151–175) with `kind: 'tool-result'`,
 the result itself; it is not merely a pending preview without result access.
 
 The first-party `dsh-client-ui-tool/lib/client.js` `singleResultText` (lines
-101–104) reads `block.content[0].text`. The plugin must support this native
-content path, in addition to its legacy output/result fixtures.
+101–104) reads `block.content[0].text`. Recorded session events may nest that
+text one level deeper at `message.content[0].content[0].text`. Turn tails and
+cards must read both shapes. A nested error flag is `content[0].isError`, not
+a missing text field.
 
 `dsh-tools/lib/types/index.d.ts` lines 97–104 defines
 `output.presentationMeta(args, value): JsonValue`. Its runtime implementation
