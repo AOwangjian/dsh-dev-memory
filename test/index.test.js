@@ -109,8 +109,9 @@ test('apply registers 3 tools via ctx.tools.register and the write-pass section'
   assert.equal(sections[0].name, 'dev-memory:write-pass');
   assert.equal(typeof sections[0].order, 'number');
   assert.equal(typeof sections[0].text, 'string');
-  assert.match(sections[0].text, /update an existing memory file/i);
-  assert.match(sections[0].text, /do not create a new sibling/i);
+  assert.match(sections[0].text, /update the existing topic file/i);
+  assert.match(sections[0].text, /do not create a sibling file/i);
+  assert.match(sections[0].text, /nothing durable was learned/i);
 });
 
 test('memory_health renders a compact markdown health table instead of raw JSON', () => {
@@ -138,6 +139,8 @@ test('jev enabled registers a decision policy without changing memory tools or t
   assert.equal(policy.order, 117);
   assert.match(policy.text, /predefined choices/i);
   assert.match(policy.text, /Do not use.*code/i);
+  assert.match(policy.text, /whether a session should record memory/i);
+  assert.doesNotMatch(policy.text, /durable enough to persist/i);
   assert.ok(registered.some((tool) => tool.name === 'jev_decide'));
 });
 
@@ -179,6 +182,7 @@ test('idle status followups a write-pass once and does not loop after that turn'
   for (const h of status()) h({ agent, status: 'idle' });
   assert.equal(followups.length, 1);
   assert.match(followups[0].content[0].text, /memory_write/);
+  assert.match(followups[0].content[0].text, /no memory update is needed/);
   for (const h of status()) h({ agent, status: 'running' });
   for (const h of status()) h({ agent, status: 'idle' });
   assert.equal(followups.length, 1, 'write-pass idle must not queue another write-pass');
