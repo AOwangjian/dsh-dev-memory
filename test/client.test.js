@@ -321,9 +321,40 @@ test('memory tool cards parse search, write, and health blocks', async () => {
     output: JSON.stringify({ summary: { directories: 4, markdownFiles: 17, memoryIndexExists: true, severityCounts: { high: 2, medium: 2, low: 11 } }, issues: { brokenLinks: [1, 2] }, workspace: { name: 'Fish20' } }),
   });
   assert.match(health.summary, /17/);
+  const pendingHealth = api.memoryToolCardModel('memory_health', { kind: 'tool-call' });
+  assert.equal(pendingHealth.state, 'running');
+  assert.equal(pendingHealth.summary, '检查中');
+  const opaqueHealth = api.memoryToolCardModel('memory_health', { kind: 'tool-result' });
+  assert.equal(opaqueHealth.summary, '结果见下方');
   assert.equal(health.directories, 4);
   assert.equal(health.index, true);
   assert.equal(health.issueCount, 2);
+});
+
+test('native DSH content and presentationMeta reach the visible memory cards', async () => {
+  const { apply } = await import('../lib/index.js');
+  const definitions = [];
+  apply({ get: key => key === 'tools' ? { register: d => definitions.push(d) } : undefined, on() {} }, { autoWrite: false });
+  const plugin = materialize();
+  const { ctx, registrations } = makeCtx();
+  plugin.apply(ctx);
+  const fixtures = [
+    ['memory_search', { query: '重试', results: [{ file: 'network.md' }], decision: { gated: true, candidateCount: 5, kept: 1, fallback: false } }, '1 条命中', 'Jev 筛选：5 候选 → 1 保留'],
+    ['memory_health', { summary: { markdownFiles: 107, directories: 24, memoryIndexExists: true, severityCounts: { high: 8, medium: 23, low: 135 } }, issues: { missingMeta: ['a.md'] }, decision: { gated: true, needsAttention: 0.61 } }, '107 个文件 · 8 高 / 23 中 / 135 低', '61%'],
+    ['memory_write', { written: true, audit: { action: 'update', relPath: 'network.md', summary: '更新重试规则' } }, '更新项目记忆', 'network.md'],
+  ];
+  for (const [name, value, heading, detail] of fixtures) {
+    const definition = definitions.find(d => d.name === name);
+    const block = { kind: 'tool-result', seq: 42, time: 1, callId: 'call-1', callTime: 0, call: { name, argsRaw: '{}' }, isError: false, subCalls: [], content: definition.output.render({}, value) };
+    const Component = registrations.find(r => r.options.key === name).component;
+    // Native JSON content must work for old search/write history without metadata.
+    if (name !== 'memory_health') assert.ok(collectText(Component({ toolName: name, block })).includes(heading));
+    assert.equal(typeof definition.output.presentationMeta, 'function');
+    block.meta = JSON.parse(JSON.stringify(definition.output.presentationMeta({}, value)));
+    const text = collectText(Component({ toolName: name, block }));
+    assert.ok(text.includes(heading), text);
+    assert.ok(text.includes(detail), text);
+  }
 });
 
 function collectText(node) {

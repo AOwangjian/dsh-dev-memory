@@ -1,5 +1,28 @@
 # DSH Interface Contract — Discovery Record
 
+## Tool card data contract — verified 2026-09-22
+
+The installed DSH `dsh-client-ui-conversation/lib/types/client/contract/records.d.ts`
+defines `ToolResultNode` (lines 151–175) with `kind: 'tool-result'`,
+`content: ContentBlock[]`, `isError`, and optional `meta`. RunningToolCall
+(lines 251–263) has `argsRaw` directly and no `kind`. A settled card receives
+the result itself; it is not merely a pending preview without result access.
+
+The first-party `dsh-client-ui-tool/lib/client.js` `singleResultText` (lines
+101–104) reads `block.content[0].text`. The plugin must support this native
+content path, in addition to its legacy output/result fixtures.
+
+`dsh-tools/lib/types/index.d.ts` lines 97–104 defines
+`output.presentationMeta(args, value): JsonValue`. Its runtime implementation
+in `dsh-tools/lib/index.js` lines 3428–3435 projects this into `meta` for
+top-level calls. The three memory tools use `{ devMemory: value }`, allowing
+cards to display canonical health/search/write data even when model-facing
+content is a Markdown report. Nested calls and older JSON history use the
+native text-content fallback; metadata is not assumed present there.
+
+Missing data is not a zero count. Historical Markdown-only results without
+metadata cannot reconstruct all original structured fields.
+
 > Task 1 (interface discovery) for the `dsh-dev-memory` plugin.
 > Branch: `feat/plugin`. This file is the source-of-truth evidence for every
 > value in `lib/contract.js`. Every non-null entry below carries a real source
